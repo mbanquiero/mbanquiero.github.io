@@ -1,0 +1,390 @@
+
+
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Tutorial de WebGL </title>
+
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="heightmap.js"></script>
+<script type="text/javascript" src="skydome.js"></script>
+<script type="text/javascript" src="mesh.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+	varying vec4 vColor;
+	varying vec3 vNormal;
+	varying vec3 vPos;
+	varying vec2 vTextureCoord;
+    uniform vec3 vEye;
+	uniform sampler2D uSampler;	
+	
+    void main(void) {
+	
+		vec4 color_base = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+		/*
+		// luz diffuse
+		vec3 LightPos = vec3(0.0,10.0,0.0);
+		vec3 N = normalize(vNormal);
+		vec3 L = normalize(LightPos - vPos);
+		float kd = clamp(abs(dot(vNormal,L)) *0.7 , 0.0 , 1.0);
+		vec3 diffuse = color_base * kd;
+		
+		// luz specular
+		vec3 D = normalize(vPos-vEye);
+		float ks = clamp(dot(reflect(L,N), D) , 0.0 , 1.0);
+		ks = pow(ks ,5.0);
+		vec3 specular = vec3(1.0 , 1.0 , 1.0) * ks;
+		// luz ambiente
+		vec3 ambient = vec3(1.0 , 1.0 , 1.0) * 0.5;
+		
+        gl_FragColor.rgb = clamp(diffuse + specular + ambient , 0.0 , 1.0);
+		*/
+		
+		gl_FragColor = color_base;
+		if(gl_FragColor.a < 100.0 / 256.0)
+			discard;
+
+    }
+	
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+	attribute vec3 aVertexNormal;
+    attribute vec2 aVertexTexCoords;
+	uniform sampler2D uSampler;	
+	
+    uniform mat4 matWorld;
+    uniform mat4 matView;
+    uniform mat4 matProj;
+
+	varying vec4 vColor;
+	varying vec3 vNormal;
+	varying vec3 vPos;
+	varying vec2 vTextureCoord;
+
+	uniform float time;
+	
+    void main(void) {
+		
+        gl_Position = matProj * matView * matWorld * vec4(aVertexPosition , 1.0);
+		vColor = vec4(1.0,0.0,1.0,1.0);
+		vNormal = aVertexNormal;
+		vTextureCoord = aVertexTexCoords;
+    }
+</script>
+
+
+<script type="text/javascript">
+
+
+	(function() {
+	var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                              window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+	window.requestAnimationFrame = requestAnimationFrame;
+	})();
+	
+	var key_left = false;
+	var key_rigth = false;
+	var key_up = false;
+	var key_down = false;
+	
+	function makeLookAt(cameraPosition, target, up, matView) {
+	var xAxis = vec3.create();
+	var yAxis = vec3.create();
+	var zAxis = vec3.create();
+	
+	vec3.subtract(cameraPosition, target,zAxis)
+	vec3.normalize(zAxis);
+	vec3.cross(up, zAxis,xAxis);
+	vec3.normalize(xAxis);
+	vec3.cross(zAxis, xAxis,yAxis);
+
+	var tx = vec3.dot(xAxis,cameraPosition);
+	var ty = vec3.dot(yAxis,cameraPosition);
+	var tz = vec3.dot(zAxis,cameraPosition);
+
+	return [
+			xAxis[0] , yAxis[0] , zAxis[0] , 0 , 
+			xAxis[1] , yAxis[1] , zAxis[1] , 0 , 
+			xAxis[2] , yAxis[2] , zAxis[2] , 0 , 
+			-tx 	 ,		-ty ,	    -tz, 1
+			]
+		
+	}
+	
+    var gl;
+    function initGL(canvas) {
+        try {
+			gl = canvas.getContext("webgl", 
+                 { antialias: false,
+                   depth: true });            
+		    gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+        gl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute);
+		
+        shaderProgram.vertexTexCoordsAttribute = gl.getAttribLocation(shaderProgram, "aVertexTexCoords");
+        gl.enableVertexAttribArray(shaderProgram.vertexTexCoordsAttribute);
+
+    }
+
+    var matView = mat4.create();
+    var matWorld = mat4.create();
+    var matProj = mat4.create();
+
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matWorld"), false, matWorld);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matView"), false, matView);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matProj"), false, matProj);
+    }
+
+	
+	var mySkyBox;
+	var myHeightMap;
+	var Buggy;
+	var arbol;
+
+
+	function initScene()
+	{
+		myHeightMap = new heigthmap("media/p9890470.bmp","media/terrain.bmp");
+		mySkyBox = new skydome("media/skydome_1.png");
+		Buggy = new mesh("media/Buggy.msh");
+		arbol = new mesh("media/ArbolSelvatico2.msh");
+	}
+
+
+	var vPosBuggy = [300, 25, 300];
+	var angle = 3.14;
+	var time = 0;
+	var vel_lineal = 0.01;
+	var vel_an = 0.001;
+	
+    function render(elapsed_time) {
+		if(!myHeightMap.loaded)
+			return;
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 1.0, 40000.0, matProj);
+        mat4.identity(matWorld);
+		
+		time += elapsed_time;
+		
+		if(key_rigth)
+			angle += elapsed_time*vel_an;
+		else
+		if(key_left)
+			angle -= elapsed_time*vel_an;
+		
+		
+		var vel = 0;
+		if(key_up)
+			vel = vel_lineal*elapsed_time;
+		else
+		if(key_down)
+			vel = -vel_lineal*elapsed_time;
+		
+		
+		vPosBuggy[0] += vel*Math.cos(angle);
+		vPosBuggy[2] += vel*Math.sin(angle);
+		vPosBuggy[1] = myHeightMap.HeightMap(vPosBuggy[0],vPosBuggy[2]) + 0.1;
+		
+		var vLookFrom = [vPosBuggy[0] - Math.cos(angle)*10, vPosBuggy[1]+2, vPosBuggy[2] - Math.sin(angle)*10];
+		var vLookAt = [vPosBuggy[0] + Math.cos(angle)*50, vPosBuggy[1]+5, vPosBuggy[2] + Math.sin(angle)*50];
+		
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "vEye"), vLookFrom);
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "time"), time);
+		
+        matView = makeLookAt(vLookFrom, vLookAt, [0,1,0]);
+		setMatrixUniforms();
+
+		
+		// heighmap
+		myHeightMap.render();
+		
+		// skydome
+		mat4.identity(mySkyBox.matWorld);
+		mat4.translate(mySkyBox.matWorld , [vLookFrom[0],-100,vLookFrom[2]]);
+		mat4.scale(mySkyBox.matWorld , [20,10,20]);
+		mySkyBox.render();
+		
+		// arbol
+		mat4.identity(arbol.matWorld);
+		mat4.translate(arbol.matWorld , [10,20,20]);
+		mat4.scale(arbol.matWorld , [1,1,1]);
+		arbol.render();
+
+
+		// buggy
+		var vPosBuggySig = []; 
+		vPosBuggySig[0] = vPosBuggy[0] + Math.cos(angle);
+		vPosBuggySig[2] = vPosBuggy[2] + Math.sin(angle);
+		vPosBuggySig[1] = myHeightMap.HeightMap(vPosBuggySig[0],vPosBuggySig[2]) + 0.1;
+		var zAxis = vec3.create();
+		vec3.subtract(vPosBuggy,vPosBuggySig,zAxis)
+		vec3.normalize(zAxis);
+		
+		var vPosBuggyDer = []; 
+		vPosBuggyDer[0] = vPosBuggy[0] + Math.cos(angle+Math.PI/2);
+		vPosBuggyDer[2] = vPosBuggy[2] + Math.sin(angle+Math.PI/2);
+		vPosBuggyDer[1] = myHeightMap.HeightMap(vPosBuggyDer[0],vPosBuggyDer[2]) + 0.1;
+		var xAxis = vec3.create();
+		vec3.subtract(vPosBuggy,vPosBuggyDer,xAxis)
+		vec3.normalize(xAxis);
+		var yAxis = vec3.create();
+		vec3.cross(xAxis, zAxis,yAxis);
+		var matRotacion = [
+			xAxis[0] , xAxis[1] , xAxis[2] , 0 , 
+			yAxis[0] , yAxis[1] , yAxis[2] , 0 , 
+			zAxis[0] , zAxis[1] , zAxis[2] , 0 , 
+			0 	 ,		0 ,	    0, 			1
+			];
+        mat4.identity(Buggy.matWorld);
+		mat4.translate(Buggy.matWorld , vPosBuggy);
+		mat4.multiply( Buggy.matWorld,matRotacion,Buggy.matWorld);
+		mat4.scale(Buggy.matWorld , [0.1,0.1,0.1]);
+		
+		/*
+		// version simple
+		mat4.translate(Buggy.matWorld , vPosBuggy);
+		mat4.rotate(Buggy.matWorld , -3.14/2-angle,[0,1,0]);
+		mat4.scale(Buggy.matWorld , [0.1,0.1,0.1]);
+		*/
+		Buggy.render();
+
+    }
+
+
+	var lastTime = 0;
+	function RenderLoop()
+	{
+		requestAnimationFrame(RenderLoop);
+		var timeNow = new Date().getTime();
+		if (lastTime != 0) {
+			var elapsed = timeNow - lastTime;
+			render(elapsed);
+		}
+		lastTime = timeNow;
+	 }
+	 
+	function processKey(e,flag) 
+	{
+		if(e.keyCode==37)
+		{
+			key_left = flag;
+		}
+		if(e.keyCode==39)
+		{
+			key_rigth = flag;
+		}
+		if(e.keyCode==38)
+		{
+			key_up = flag;
+		}
+		if(e.keyCode==40)
+		{
+			key_down = flag;
+		}
+	}
+	 
+	function doKeyDown(e) 
+	{
+		processKey(e,true);
+	}
+
+	function doKeyUp(e) 
+	{
+		processKey(e,false);
+	}
+
+	
+	
+
+    function webGLStart() {
+	document.addEventListener( "keydown", doKeyDown, true);
+	document.addEventListener( "keyup", doKeyUp, true);
+        var canvas = document.getElementById("canvas");
+        initGL(canvas);
+        initShaders();
+        initScene();
+		gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);		
+		gl.enable(gl.BLEND);
+        RenderLoop();
+    }
+</script>
+
+</head>
+
+
+<body onload="webGLStart()">
+    <canvas id="canvas" style="border: none;" width="1100" height="600"></canvas>
+</body>
+</html>

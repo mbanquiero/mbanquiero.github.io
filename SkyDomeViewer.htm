@@ -1,0 +1,337 @@
+
+
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Tutoriales de WEBGL </title>
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="skydome.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+	// ---------------- FRAGMENT_SHADER -----------------------------
+    precision mediump float;
+	varying vec4 vColor;
+	varying vec3 vNormal;
+	varying vec3 vPos;
+	varying vec2 vTextureCoord;
+    uniform vec3 vEye;
+	uniform sampler2D uSampler;	
+	
+    void main(void) {
+
+		gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+		if(gl_FragColor.a < 100.0 / 256.0)
+			discard;
+		//gl_FragColor.a = 1.0;
+		//gl_FragColor.rg = vTextureCoord;
+		//gl_FragColor.b = 0.0;
+    }
+	
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+	// ---------------- VERTEX_SHADER -----------------------------
+    attribute vec3 aVertexPosition;
+	attribute vec3 aVertexNormal;
+    attribute vec2 aVertexTexCoords;
+	uniform sampler2D uSampler;	
+	
+    uniform mat4 matWorld;
+    uniform mat4 matView;
+    uniform mat4 matProj;
+
+	varying vec4 vColor;
+	varying vec3 vNormal;
+	varying vec3 vPos;
+	varying vec2 vTextureCoord;
+
+	uniform float time;
+	
+    void main(void) {
+		
+        gl_Position = matProj * matView * matWorld * vec4(aVertexPosition , 1.0);
+		vColor = vec4(1.0,0.0,1.0,1.0);
+		vNormal = aVertexNormal;
+		vTextureCoord = aVertexTexCoords;
+    }
+</script>
+
+
+<script type="text/javascript">
+
+
+	// chrome render loop hack
+	(function() {
+	var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                              window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+	window.requestAnimationFrame = requestAnimationFrame;
+	})();
+	
+
+	var key_left = false;
+	var key_rigth = false;
+	var key_up = false;
+	var key_down = false;
+	var EV_NADA				= 0;
+
+	function makeLookAt(cameraPosition, target, up, matView) {
+	var xAxis = vec3.create();
+	var yAxis = vec3.create();
+	var zAxis = vec3.create();
+	
+	vec3.subtract(cameraPosition, target,zAxis)
+	vec3.normalize(zAxis);
+	vec3.cross(up, zAxis,xAxis);
+	vec3.normalize(xAxis);
+	vec3.cross(zAxis, xAxis,yAxis);
+
+	var tx = vec3.dot(xAxis,cameraPosition);
+	var ty = vec3.dot(yAxis,cameraPosition);
+	var tz = vec3.dot(zAxis,cameraPosition);
+
+	return [
+			xAxis[0] , yAxis[0] , zAxis[0] , 0 , 
+			xAxis[1] , yAxis[1] , zAxis[1] , 0 , 
+			xAxis[2] , yAxis[2] , zAxis[2] , 0 , 
+			-tx 	 ,		-ty ,	    -tz, 1
+			]
+		
+	}
+	
+    var gl;
+    function initGL(canvas) {
+        try {
+			gl = canvas.getContext("webgl", 
+                 { antialias: true,
+                   depth: true ,
+				   alpha: false  
+				   });            
+		    gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+	// -------------- html stuff para cargar los shaders -----------------------
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+	// inicializo los shaders
+    var shaderProgram;
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+		
+        shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+        gl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute);
+
+        shaderProgram.vertexTexCoordsAttribute = gl.getAttribLocation(shaderProgram, "aVertexTexCoords");
+        gl.enableVertexAttribArray(shaderProgram.vertexTexCoordsAttribute);
+		
+		
+		
+    }
+
+	// matrices de transformacion
+    var matView = mat4.create();
+    var matWorld = mat4.create();
+    var matProj = mat4.create();
+
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matWorld"), false, matWorld);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matView"), false, matView);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matProj"), false, matProj);
+    }
+
+	// textura x default (si no encuentra alguna de la escena)
+	var texture_default;
+	function initTextures() 	{
+		texture_default = gl.createTexture();
+		var img = new Image();
+		img.onload = function() { handleTextureLoaded(img, texture_default); }
+		img.src = "media/default.png";
+	}
+
+	function handleTextureLoaded(image, texture) {
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+		gl.generateMipmap(gl.TEXTURE_2D);
+		gl.bindTexture(gl.TEXTURE_2D, null);
+	}
+	
+	// render loop
+	var time = 0;
+	var vLookFrom = [0, 5, 0];
+	var vLookAt = [50, 10, 0];
+	var angle = 0;
+	var vel_an = 0.005;
+	var vel_lineal = 0.2;
+	
+    function render(elapsed_time) {
+		if(!mySkyBox.loaded)
+			return;
+
+		gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 1.0, 3000.0, matProj);
+        mat4.identity(matWorld);
+		
+		time += elapsed_time;
+		time += elapsed_time;
+		var vel = 0;
+		if(key_rigth)
+			angle += elapsed_time*vel_an;
+		else
+		if(key_left)
+			angle -= elapsed_time*vel_an;
+		if(key_up)
+			vel = vel_lineal*elapsed_time;
+		else
+		if(key_down)
+			vel = -vel_lineal*elapsed_time;
+			
+		vLookFrom[0] += vel*Math.cos(angle);
+		vLookFrom[2] += vel*Math.sin(angle);
+		var vLookAt = [vLookFrom[0] + Math.cos(angle)*50, vLookFrom[1]+15, vLookFrom[2] + Math.sin(angle)*50];
+		
+		
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "vEye"), vLookFrom);
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "time"), time);
+		gl.bindTexture(gl.TEXTURE_2D, texture_default);
+
+        matView = makeLookAt(vLookFrom, vLookAt, [0,1,0]);
+        mat4.identity(mySkyBox.matWorld);
+	
+		mat4.scale(mySkyBox.matWorld , [50,10,50]);
+		
+		setMatrixUniforms();
+		mySkyBox.render();
+		
+    }
+
+	var mySkyBox;
+	function initMeshes()
+	{
+		mySkyBox = new skydome("media/skydome_1.png");
+	}
+
+	var lastTime = 0;
+	function RenderLoop()
+	{
+		requestAnimationFrame(RenderLoop);
+		var timeNow = new Date().getTime();
+		if (lastTime != 0) {
+			var elapsed = timeNow - lastTime;
+			render(elapsed);
+		}
+		lastTime = timeNow;
+	 }
+
+	function processKey(e,flag) 
+	{
+		if(e.keyCode==37)
+		{
+			key_left = flag;
+		}
+		if(e.keyCode==39)
+		{
+			key_rigth = flag;
+		}
+		if(e.keyCode==38)
+		{
+			key_up = flag;
+		}
+		if(e.keyCode==40)
+		{
+			key_down = flag;
+		}
+	}
+	 
+	function doKeyDown(e) 
+	{
+		processKey(e,true);
+	}
+
+	function doKeyUp(e) 
+	{
+		processKey(e,false);
+	}
+	
+
+    function webGLStart() {
+		
+		document.addEventListener( "keydown", doKeyDown, true);
+		document.addEventListener( "keyup", doKeyUp, true);
+
+        var canvas = document.getElementById("canvas");
+        initGL(canvas);
+        initShaders();
+		initTextures();
+        initMeshes();
+		gl.clearColor(0.5, 0.5, 0.5, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);		
+		gl.enable(gl.BLEND);
+        RenderLoop();
+    }
+	
+</script>
+
+</head>
+
+
+<body onload="webGLStart();">
+    <canvas id="canvas" style="border: none;" width="1000" height="700"></canvas>
+</body>
+</html>
