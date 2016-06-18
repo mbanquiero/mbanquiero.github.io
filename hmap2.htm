@@ -1,0 +1,526 @@
+
+
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Video juegos UADE </title>
+
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+	varying vec4 vColor;
+	varying vec3 vNormal;
+	varying vec3 vPos;
+	varying vec2 vTextureCoord;
+    uniform vec3 vEye;
+	uniform sampler2D uSampler;	
+	
+    void main(void) {
+	
+		vec3 color_base = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t)).rgb;
+
+		/*
+		// luz diffuse
+		vec3 LightPos = vec3(0.0,10.0,0.0);
+		vec3 N = normalize(vNormal);
+		vec3 L = normalize(LightPos - vPos);
+		float kd = clamp(abs(dot(vNormal,L)) *0.7 , 0.0 , 1.0);
+		vec3 diffuse = color_base * kd;
+		
+		// luz specular
+		vec3 D = normalize(vPos-vEye);
+		float ks = clamp(dot(reflect(L,N), D) , 0.0 , 1.0);
+		ks = pow(ks ,5.0);
+		vec3 specular = vec3(1.0 , 1.0 , 1.0) * ks;
+		// luz ambiente
+		vec3 ambient = vec3(1.0 , 1.0 , 1.0) * 0.5;
+		
+        gl_FragColor.rgb = clamp(diffuse + specular + ambient , 0.0 , 1.0);
+		*/
+		gl_FragColor.rgb = color_base;
+        gl_FragColor.a = 1.0;
+    }
+	
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+	attribute vec3 aVertexNormal;
+	uniform sampler2D uSampler;	
+	
+    uniform mat4 matWorld;
+    uniform mat4 matView;
+    uniform mat4 matProj;
+
+	varying vec4 vColor;
+	varying vec3 vNormal;
+	varying vec3 vPos;
+	varying vec2 vTextureCoord;
+
+	uniform float time;
+	
+    void main(void) {
+		
+        gl_Position = matProj * matView * matWorld * vec4(aVertexPosition , 1.0);
+		vColor = vec4(1.0,0.0,1.0,1.0);
+		vNormal = aVertexNormal;
+		vTextureCoord = aVertexPosition.xz/1024.0 + 0.5;
+    }
+</script>
+
+
+<script type="text/javascript">
+
+
+	(function() {
+	var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                              window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+	window.requestAnimationFrame = requestAnimationFrame;
+	})();
+	
+	var key_left = false;
+	var key_rigth = false;
+	var key_up = false;
+	var key_down = false;
+	
+	function makeLookAt(cameraPosition, target, up, matView) {
+	var xAxis = vec3.create();
+	var yAxis = vec3.create();
+	var zAxis = vec3.create();
+	
+	vec3.subtract(cameraPosition, target,zAxis)
+	vec3.normalize(zAxis);
+	vec3.cross(up, zAxis,xAxis);
+	vec3.normalize(xAxis);
+	vec3.cross(zAxis, xAxis,yAxis);
+
+	var tx = vec3.dot(xAxis,cameraPosition);
+	var ty = vec3.dot(yAxis,cameraPosition);
+	var tz = vec3.dot(zAxis,cameraPosition);
+
+	return [
+			xAxis[0] , yAxis[0] , zAxis[0] , 0 , 
+			xAxis[1] , yAxis[1] , zAxis[1] , 0 , 
+			xAxis[2] , yAxis[2] , zAxis[2] , 0 , 
+			-tx 	 ,		-ty ,	    -tz, 1
+			]
+		
+	}
+	
+    var gl;
+    function initGL(canvas) {
+        try {
+			gl = canvas.getContext("webgl", 
+                 { antialias: false,
+                   depth: true });            
+		    gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+        gl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute);
+		
+
+    }
+
+	var init = false;
+    var matView = mat4.create();
+    var matWorld = mat4.create();
+    var matProj = mat4.create();
+
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matWorld"), false, matWorld);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matView"), false, matView);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matProj"), false, matProj);
+    }
+
+
+	var vertexPositionBuffer;
+	var vertexNormalBuffer;
+
+    function HeightMap( x, z) {
+		x+=512;
+		z+=512;
+		if(z<0)
+			z = 0;
+		else 
+		if(z>1023)
+			z = 1023;
+		if(x<0)
+			x = 0;
+		else 
+		if(x>1023)
+			x = 1023;
+			
+		//return 0*HeightMapArray[(x*1024+z)|0]*50.0/256.0;
+		return Math.cos(x/1024.0*60)*10 + Math.sin(z/1024.0*60)*10;
+		
+	}
+
+	function HeightMapNormal( x, z){
+		var ep = 2.0;
+		var y = HeightMap(x,z);
+		var yx = HeightMap(x+ep,z);
+		var yz = HeightMap(x,z+ep);
+		
+		var fx = [ep , yx-y , 0.0];
+		var fz = [0.0 ,yz-y, ep ];
+		var N = vec3.create();
+		vec3.cross(fz,fx,N);
+		vec3.normalize(N);
+		return N;
+	}
+	
+    function initBuffers() {
+	
+		var t = 0;
+		var n = 0;
+        var vertices = [];
+        var normales = [];
+		var cant_v = 0;
+		
+		var dx = 1;
+		var dz = 1;
+		for(var x=-512;x<511;x+=dx)
+		for(var z=-512;z<511;z+=dz)
+		{
+			var x0 = x;
+			var z0 = z;
+			var y0 = HeightMap(x0,z0);
+			var N0 = HeightMapNormal(x0,z0);
+
+			var x1 = x + dx;
+			var z1 = z;
+			var y1 = HeightMap(x1,z1);
+			var N1 = HeightMapNormal(x1,z1);
+			
+			var x2 = x;
+			var z2 = z + dz;
+			var y2 = HeightMap(x2,z2);
+			var N2 = HeightMapNormal(x2,z2);
+			
+			var x3 = x + dx;
+			var z3 = z + dz;
+			var y3 = HeightMap(x3,z3);
+			var N3 = HeightMapNormal(x3,z3);
+			
+			vertices[t++] = x0;
+			vertices[t++] = y0;
+			vertices[t++] = z0;
+			normales[n++] = N0[0];			
+			normales[n++] = N0[1];			
+			normales[n++] = N0[2];			
+			
+			vertices[t++] = x1;
+			vertices[t++] = y1;
+			vertices[t++] = z1;
+			normales[n++] = N1[0];			
+			normales[n++] = N1[1];			
+			normales[n++] = N1[2];			
+			
+			vertices[t++] = x2;
+			vertices[t++] = y2;
+			vertices[t++] = z2;
+			normales[n++] = N2[0];			
+			normales[n++] = N2[1];			
+			normales[n++] = N2[2];			
+
+			vertices[t++] = x1;
+			vertices[t++] = y1;
+			vertices[t++] = z1;
+			normales[n++] = N1[0];			
+			normales[n++] = N1[1];			
+			normales[n++] = N1[2];			
+
+			vertices[t++] = x2;
+			vertices[t++] = y2;
+			vertices[t++] = z2;
+			normales[n++] = N2[0];			
+			normales[n++] = N2[1];			
+			normales[n++] = N2[2];			
+
+			vertices[t++] = x3;
+			vertices[t++] = y3;
+			vertices[t++] = z3;
+			normales[n++] = N3[0];			
+			normales[n++] = N3[1];			
+			normales[n++] = N3[2];			
+			
+			cant_v+=6;
+			
+			
+		}
+		
+		
+		vertices[t++] = -1;
+		vertices[t++] = 0;
+		vertices[t++] = 0;
+		vertices[t++] = 0;
+		vertices[t++] = 1;
+		vertices[t++] = 0;
+		vertices[t++] = 1;
+		vertices[t++] = 0;
+		vertices[t++] = 0;
+		
+		for(var i=0;i<9;++i)
+			normales[n++] = 0;
+					
+
+        vertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        vertexPositionBuffer.itemSize = 3;
+        vertexPositionBuffer.numItems = cant_v;
+		
+        vertexNormalBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normales), gl.STATIC_DRAW);
+        vertexNormalBuffer.itemSize = 3;
+        vertexNormalBuffer.numItems = cant_v;
+		
+		 init = true;
+    }
+	
+	var texture;
+	function initTextures() 	{
+		texture = gl.createTexture();
+		var img = new Image();
+		img.onload = function() { handleTextureLoaded(img, texture); }
+		img.src = "media/terrain.png";
+	}
+
+	function handleTextureLoaded(image, texture) {
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+		  gl.generateMipmap(gl.TEXTURE_2D);
+		  gl.bindTexture(gl.TEXTURE_2D, null);
+	}
+	
+	
+	var HeightMapArray;
+	
+	function InitHeightMapFromBitmapFile(fname,dx,dy) {
+		var xhr = new XMLHttpRequest();
+		xhr.open('GET', fname, true);
+		xhr.responseType = 'arraybuffer';
+		xhr.onload = function(e) {
+			HeightMapArray = initHeightMapFromData(new Uint8Array(this.response) , dx,dy);
+			initBuffers();
+			};
+		xhr.send();		
+	}	
+	
+	function initHeightMapFromData(uInt8Array , dx,dy) {
+	
+		var HeightMapData = new Uint8Array(dx*dy);
+		var t = 54;
+		var s = 0;
+		for(var j=0;j<dx;++j)
+		for(var i=0;i<dy;++i)
+		{
+			var R = uInt8Array[t++];
+			var G = uInt8Array[t++];
+			var B = uInt8Array[t++];
+			HeightMapData[j*dy+ i] = R;
+		}
+		return HeightMapData;
+	}	
+
+	var vLookFrom = [300, 25, 300];
+	var angle = 0;
+	var time = 0;
+    function render(elapsed_time) {
+		if(!init)
+			return;
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 1.0, 40000.0, matProj);
+        mat4.identity(matWorld);
+		
+		time += elapsed_time;
+		
+		var vel_an = 0.001;
+		if(key_rigth)
+			angle += elapsed_time*vel_an;
+		else
+		if(key_left)
+			angle -= elapsed_time*vel_an;
+		
+		
+		var vel = 0;
+		if(key_up)
+			vel = 0.1*elapsed_time;
+		else
+		if(key_down)
+			vel = -0.1*elapsed_time;
+		
+		vLookFrom[0] += vel*Math.cos(angle);
+		vLookFrom[2] += vel*Math.sin(angle);
+		var vLookAt = [vLookFrom[0] + Math.cos(angle)*50, 5, vLookFrom[2] + Math.sin(angle)*50];
+		
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "vEye"), vLookFrom);
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "time"), time);
+		
+        matView = makeLookAt(vLookFrom, vLookAt, [0,1,0]);
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, vertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+		
+
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+		gl.uniform1i(shaderProgram.samplerUniform, 0);
+		
+        setMatrixUniforms();
+		// heighmap
+        gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems);
+
+		// triangulito
+		var x = vLookAt[0];
+		var z = vLookAt[2]
+		var y = HeightMap(x,z);
+		
+        mat4.identity(matWorld);
+		mat4.translate(matWorld , [x,y,z]);
+		mat4.rotate(matWorld , -angle-Math.PI/2,[0,1,0]);
+		mat4.scale(matWorld , [5,5,5]);
+        setMatrixUniforms();
+		gl.drawArrays(gl.TRIANGLES, vertexPositionBuffer.numItems,3);
+
+    }
+
+
+	var lastTime = 0;
+	function RenderLoop()
+	{
+		requestAnimationFrame(RenderLoop);
+		var timeNow = new Date().getTime();
+		if (lastTime != 0) {
+			var elapsed = timeNow - lastTime;
+			render(elapsed);
+		}
+		lastTime = timeNow;
+	 }
+	 
+	function processKey(e,flag) 
+	{
+		if(e.keyCode==37)
+		{
+			key_left = flag;
+		}
+		if(e.keyCode==39)
+		{
+			key_rigth = flag;
+		}
+		if(e.keyCode==38)
+		{
+			key_up = flag;
+		}
+		if(e.keyCode==40)
+		{
+			key_down = flag;
+		}
+	}
+	 
+	function doKeyDown(e) 
+	{
+		processKey(e,true);
+	}
+
+	function doKeyUp(e) 
+	{
+		processKey(e,false);
+	}
+
+	
+	
+
+    function webGLStart() {
+	document.addEventListener( "keydown", doKeyDown, true);
+	document.addEventListener( "keyup", doKeyUp, true);
+        var canvas = document.getElementById("canvas");
+        initGL(canvas);
+        initShaders();
+		InitHeightMapFromBitmapFile("media/p9890470.bmp",1024,1024);
+        initTextures();
+		gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+        RenderLoop();
+    }
+</script>
+
+</head>
+
+
+<body onload="webGLStart()">
+    <canvas id="canvas" style="border: none;" width="1100" height="600"></canvas>
+</body>
+</html>
