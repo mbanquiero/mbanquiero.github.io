@@ -121,6 +121,17 @@ function onMouseUp(e) {
 	}
 }
 
+
+
+function handleMove(evt) {
+  evt.preventDefault();
+   var touches = evt.changedTouches;
+   var i = touches.length-1;
+	if(i>=0)
+		// estoy agregando puntos al line path
+		line_path[line_path.length] = {x:touches[i].pageX , y:touches[i].pageY};
+}
+
 function clearPath()
 {
 	line_path = [];
@@ -144,6 +155,9 @@ function main()
 	document.addEventListener( "mousemove", onMouseMove, true);
 	document.addEventListener("mousedown", onMouseDown, true);
 	document.addEventListener("mouseup", onMouseUp, true);
+	
+	// touch support
+	document.addEventListener("touchmove", handleMove, false);	
 	ctx = canvas.getContext('2d');
 	loadScene();
 	setInterval(RenderLoop, elapsed_time * 1000);
