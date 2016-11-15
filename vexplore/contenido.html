@@ -12,14 +12,151 @@
 <li><a href="contenido.html">Contenido</a></li>
 <li><a href="vexplore.html">Game</a></li>
 <li><a href="source.html">Codigo</a></li>
-<li><a href="link.html">Links</a></li>
 <li><a href="about.html">About</a></li>
 </ul>
     </nav>
 	<div class="container">
 	<div class="blurb">
 			<h1>Contenido</h1>
+			<h1>Datos volumétricos</h1>
 			<p>
+				Existen numerosos formatos de datos volumétricos dependiendo del tipo de máquina  (
+				scanner, PET, etc.) y el tipo de uso. La mayoría define un tamaño en las 3 
+				dimensiones (ancho, alto y profundidad) en vóxeles, y cada vóxel contiene un valor 
+				de opacidad o capacidad de absorción de energía en esa región del espacio. 
+			</p>
+			
+			<h1>Ecuación de Volumen Rendering</h1>
+			<p>
+				La ecuación de VR explica cómo la energía es absorbida por las diferentes capas 
+				de materia a medida que atraviesa el volumen a estudiar. 
+				Los parámetros ópticos son obtenidos directamente de o computados a partir de una o 
+				varias funciones de transfe-rencia sobre los datos. Estas funciones resaltan o clasifican 
+				ciertas partes del volumen.
+			</p>
+			<img src="media/volrender2.png">
+			
+			<p>
+				Como la ecuación de VR no puede ser evaluada numéricamente en forma cerrada, (closed form) 
+				se utilizan distintas aproximaciones como la ecuación de VR discreta			
+			</p>
+			<img src="media/volrender.png">
+			
+			
+			<h1>VR basado en texturas</h1>
+			<p>
+				Las placas de video actuales son capaces de almacenar grandes cantidades de datos  
+				en formato de imágenes llamados texturas. Están diseñadas para aplicarse sobre 
+				primitivas gráficas en el proceso llamado shading o texturing. 
+				Muchas placas de última generación tienen soporte nativo para texturas 3D que 
+				pueden usarse para almacenar datos volumétricos en forma directa. 
+				Las texturas volumétricas están compuestas por rebanadas o cortes 2D que se apilan 
+				internamente formando un cubo y que pueden ser accedidas usando 3 coordenadas de 
+				texturas u, v, w.			
+			</p>
+			<img src="media/tex3d.png">
+			
+			<p>
+				Las imágenes médicas suelen tener 12 o 16 bits de precisión para almacenar la 
+				intensidad de los vóxeles. Para minimizar la cantidad de memoria utilizada en la 
+				implementación se usa el formato GL_RGBA8, compuesto de 4 canales de 8 bits por canal, 
+				pudiendo almacenar un total de 4 vóxeles por cada elemento de textura (4x). 
+				Dado que el tamaño máximo de una textura es de 4096*4096 (en una placa genérica), 
+				la cantidad máxima de vóxeles es de 4096*4096*4 = 67108864, que pueden ser arreglados 
+				en una matriz de 1024*1024*64 o bien de 256*256*1024 según el escenario.
+			</p>
+			<img src="media/bitxcanal.png">
+			
+			<p>
+				En la tecnica de Texture VR la imagen original es cortada en fetas o slices. 
+				Cada slice representa una porcion plana del volumen original.
+			</p>
+			
+			<img src="media/voltexture2.png">
+		
+			<p>
+				Luego para graficar se dibujan los slices en orden de atras hacia adelante, 
+				activando la transparencia. 
+			</p>
+			<img src="media/voltexture3.png">
+			<img src="media/voltexture4.png">
+			
+			<a href="media/texturevr.mpeg" target="_blank"> 
+			<p>Video de animacion de slices</p>
+			</a>			
+			
+			<h1>Ray Casting</h1>
+			<img src="media/raycasting4.png">
+			<p>
+				La técnica estándar de ray-casting consiste en generar rayos desde el punto de 
+				vista hacia todas las direcciones; evaluar, para cada rayo, cual es el punto de 
+				entrada y cual el de salida en el volumen a renderizar; e iterar por la estructura 
+				de vóxeles desde el punto de entrada hasta el punto de salida y en cada paso evaluar 
+				la ecuación de VR.			
+			</p>
+			<img src="media/raycasting.png">
+			<p>
+			En una implementación en OPENGL, el fragment shader calcula, para cada píxel de pantalla, 
+			la dirección del rayo y los puntos de entrada y salida e iterar por el volumen computando en 
+			cada paso en la ecuación de 4,28 cm. No existe en un Vertex Shader, sino que se dibuja una 
+			primitiva que ocupa toda la pantalla, llamada fullscreen com-pute quad, para ejecutar 
+			un fragment shader para cada píxel de pantalla en paralelo.
+			En este caso, el punto de vista se encuentra dentro del volumen que se quiere dibujar y la 
+			técnica estándar no es efectiva. A medida que el rayo se aleja del punto de partida, 
+			la contribución de cada vóxel que se evalúa decrece en forma exponencial como se observa en la 
+			ecuación de VR. Para un videojuego, sólo es necesario tomar algunos puntos de muestra en la 
+			dirección del rayo. 
+			Cuántas más muestras se computen más lento es el proceso, considerando que el acceso a textura 
+			es muy costoso en la arqui-tectura de GPU. 
+			</p>
+			<img src="media/raycasting5.png">
+			
+			<p>
+			Los parámetros a configurar en el motor de visualización son:
+			<li>cantidad de pasos: cantidad de accesos a textura.</li>
+			<li>paso: distancia en vóxeles a avanzar en la dirección del rayo en cada iteración.</li>
+			<li>distancia inicial: resuelve el problema que el observador está dentro del volumen.</li>
+			</p>
+			<img src="media/raycasting2.png">
+			<p>
+			Se puede observar un artifact que genera esta técnica. Debido a la distancia entre los pasos, 
+			hay un objeto que no está siendo muestreado debido a la posición de las muestras y del 
+			objeto en si. Pero al mover la cámara y variar la posición del rayo donde se toman las muestras, 
+			el objeto se muestrea y aparece dibujado. 
+			Esto produce que los objetos aparezcan y desaparezcan a medida que la cámara se mueve. 
+			</p>
+			<img src="media/raycasting3.png">
+			<p>
+			Para atacar el problema de la figura  existen dos posibles soluciones:
+<li>	Realizar Ray Marching con una alta precisión (mayor cantidad de pasos) hasta en-contrar un vóxel con un valor de opacidad mayor al 50%, y a partir de esa posición comenzar a tomar una cantidad N de muestras.</li>
+<li>	Utilizar estructuras de aceleración para poder aumentar la cantidad de muestras a tomar a lo largo del rayo sin afectar la performance del método. </li>
+			</p>
+
+
+			<h1>Referencias</h1>
+			<p>
+	
+<li>Marc Levoy. Display of Surfaces From Volume Data. IEEE Computer Graphics and Applications 8, 3. March 1988, pp. 29 - 37.</li>
+<li>MAX, Nelson. Optical models for direct volume rendering. Visualization and Computer Graphics, IEEE Transactions on, 1995, vol. 1, no 2, p. 99-108.</li>
+<li>FAST VOLUME RENDERING USING A SHEAR-WARP FACTORIZATION OF THE VIEWING TRANSFORMATION Philippe G. Lacroute Technical Report: CSL-TR-95-678, September 1995 Stanford, CA 94305-4055</li>
+<li>Craig Upson and Michael Keeler. V-Buffer: Visible Volume Rendering. Proceedings of SIGGRAPH '88, Computer Graphics 22, 4. August 1988, pp. 59 - 64.</li>
+<li>Paolo Sabella. A Rendering Algorithm for Visualizing 3D Scalar Fields. Proceedings of SIGGRAPH '88, Computer Graphics 22, 4. August 1988, pp. 51 - 58.</li>
+<li>J. Kruger and R. Westermann. Acceleration techniques for gpu-based volume rendering. In Proceedings of the 14th IEEE Visualization 2003 (VIS’03), VIS ’03, pages 38–, Washington, DC, USA, 2003. IEEE Computer Society.</li>
+<li>WEISS, Jakob. Efficient Rendering of Highly Detailed Volumetric Scenes with GigaVóxels. 2013</li>
+<li>Henning Scharsach. Advanced gpu raycasting. Proceedings of CESCG, 5:67–76, 2005.</li>
+<li>ENGEL K., HADWIGER M., KNISS J. M., REZKSALAMA C., WEISKOPF D.: Real-time volume graphics. A K Peters, 2006.</li>
+<li>KOMMA P., FISCHER J., DUFFNER F., BARTZ D.: Lossless volume data compression schemes. In Proceedings of the Conference Simulation and Visualization (2007), p. 169–182.</li>
+<li>SUTER S. K., IGLESIAS GUITIÁN J. A., MARTON F., AGUS M., ELSENER A., ZOLLIKOFER C. P., GOPI M., GOBBETTI E., PAJAROLA R.: Interactive multiscale tensor reconstruction for multiresolution volume visualization. IEEE Transactions on Visualization and Computer Graphics 17, 12 (December 2011), 2135–2143.</li>
+<li>GOBBETTI E., IGLESIAS GUITIÁN J., MARTON F.: Covra: A compression-domain output-sensitive volume rendering architecture based on a sparse representation of vóxel blocks. Computer Graphics Forum 31, 3pt4 (2012), 1315–1324.</li>
+<li>ELLIS S.: GL_KHR_texture_compression_astc_ldr. OpenGL (4.3 & ES 3) Registry, 2012.</li>
+<li>WONG, Henry, et al. Demystifying GPU microarchitecture through microbenchmarking. En Performance Analysis of Systems & Software (ISPASS), 2010 IEEE International Symposium on. IEEE, 2010. p. 235-246</li>
+<li>BASTOS, Thiago; CELES, Waldemar. GPU-accelerated adaptively sampled distance fields. En Shape Modeling and Applications, 2008. SMI 2008. IEEE International Conference on. IEEE, 2008. p. 171-178.</li>
+<li>TOMCZAK, Lukasz Jaroslaw. GPU Ray Marching of Distance Fields. Technical University of Denmark, 2012.</li>
+<li>SIEMENS, 2015. Magnetic Resonance Imaging - DICOM Images [en línea]. 2015. S.l.: s.n. [Consulta: enero 2016]. Disponible en: http://www.healthcare.siemens.com/magnetic-resonance-imaging/magnetom-world/clinical-corner/protocols/dicom-images.</li>
+</p>
+
+			
+			
 		<ul>
 	</div> 
   
