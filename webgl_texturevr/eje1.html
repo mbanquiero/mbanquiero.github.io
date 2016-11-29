@@ -1,0 +1,94 @@
+<html>
+
+<head>
+<title>Voxel Rendering</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<style>
+.container {
+    position: relative;
+}
+#overlay {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+	color: white;
+}
+</style>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+	varying vec2 vTextureCoord;
+	uniform float iGlobalTime;
+	uniform vec3 iViewDir;
+	uniform vec3 iLookFrom;
+	uniform sampler2D uSampler;
+	
+
+	float tex3d(vec3 pos)
+	{
+		/*pos = pos + vec3(128.0,128.0,128.0);
+
+		if(pos.x<0.0 || pos.y<0.0 || pos.z<0.0 || pos.x>255.0 || pos.y >255.0 || pos.z>255.0)
+			return 0.0;
+		*/
+
+		// hack para no caer justo en el borde un tile
+		//pos /= vec3(257.0,1.0,257.0);
+		//pos.xz += 1.0/256.0;
+		
+		float zx1 = floor(pos.y/16.0) / 16.0;
+		float zy1 = floor(mod(pos.y,16.0)) / 16.0;
+		
+		float zx2 = floor((pos.y+1.0)/16.0) / 16.0;
+		float zy2 = floor(mod((pos.y+1.0),16.0)) / 16.0;
+			
+		return mix( texture2D(uSampler, pos.xz/16.0 + vec2(zx1,zy1)).r,
+					texture2D(uSampler, pos.xz/16.0 + vec2(zx2,zy2)).r,
+					fract(pos.y));
+
+		
+	}
+	
+    void main(void) {
+	
+		vec2 uv = vTextureCoord.xy;
+		float ep = 0.0;
+		//float I= tex3d(vec3(uv.x , 0 , uv.y));
+		float I = texture2D(uSampler, uv).r;
+		if(I < ep)
+			discard;
+		gl_FragColor.r = I;
+		gl_FragColor.g = I;
+		gl_FragColor.b = I;
+		gl_FragColor.a = 1.0;
+		//gl_FragColor.a *= gl_FragColor.a;
+			
+    }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+	varying vec2 vTextureCoord;
+    void main(void) {
+        gl_Position = vec4(aVertexPosition, 1.0);
+		vTextureCoord = vec2(aVertexPosition.x/2.0 + 0.5 , aVertexPosition.y/2.0 + 0.5);
+    }
+</script>
+
+<script type="text/javascript" src="math.js"></script>
+<script type="text/javascript" src="vr.js"></script>
+
+</head>
+
+
+<body onload="webGLStart();">
+	<div id="op"></div>  
+	<div class="container">
+    <canvas id="my_canvas" style="border: none;" width="800" height="600"></canvas>
+	<div id="overlay">
+		<div><span id="status_bar"></span></div>
+	</div>	
+</body>
+
+</html>
