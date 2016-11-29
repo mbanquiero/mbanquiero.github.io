@@ -280,7 +280,7 @@ function setTextureBox(x,y,z,dr,data)
 function initTexture() {
 
 	var xhr = new XMLHttpRequest();
-	xhr.open('GET', 'raw/mri-head.raw', true);
+	xhr.open('GET', 'webgl_texturevr/raw/mri-head.raw', true);
 	//xhr.open('GET', 'raw/tooth.raw', true);
 	xhr.responseType = 'arraybuffer';
 	xhr.onload = function(e) {
