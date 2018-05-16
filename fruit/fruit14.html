@@ -225,15 +225,18 @@ function onMouseUp(e) {
 
 function onTouchStart(e) {
     e = e || window.event;
+	e.preventDefault()
 }
 
 function onTouchEnd(e) {
     e = e || window.event;
+	e.preventDefault()
 	line_path = [];			
 }
 
 function onTouchMove(e) {
     e = e || window.event;
+	e.preventDefault()
 	// estoy agregando puntos al line path
 	var eventTouch = e.changedTouches[0];// Array to store previous touch cords,0 is the initial one.
 	line_path[line_path.length] = {x:eventTouch.pageX, y:eventTouch.pageY};
