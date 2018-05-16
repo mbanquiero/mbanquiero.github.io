@@ -1,0 +1,234 @@
+﻿<!DOCTYPE HTML>
+<html>
+<head>
+
+<script type="text/javascript" src="math.js"></script>
+<script type="text/javascript">
+
+var elapsed_time = 1/60;
+var canvas;
+var ctx;
+
+var screen_dx = 1000;
+var screen_dy = 600;
+
+
+// posicion del mouse
+var mouse_x = 0;
+var mouse_y = 0;
+var init = false;
+
+var click_x = 0;
+var click_y = 0;
+var timer_click = 0;
+
+var img_hormiga = new Image(); 
+
+var pos = [];
+var vel = [];
+var vel_ang = [];
+var ang = [];
+var visible = [];
+
+var time = 0;
+var keyboard = [];
+
+function Update() 
+{
+	time += elapsed_time;
+
+	if(timer_click>0)
+	{
+		timer_click -= elapsed_time;
+		if(timer_click<0)
+			timer_click = 0;
+	}
+	
+	
+	for(var i=0;i<pos.length;++i)
+	{
+		if(Math.random()>0.9)
+			vel_ang[i] *= -1;
+
+		if(Math.random()>0.5)
+			vel[i] = Math.random()*200 + 100;
+			
+		ang[i]+=vel_ang[i]*elapsed_time;
+		pos[i].x += vel[i]*Math.cos(ang[i])*elapsed_time;
+		pos[i].y += vel[i]*Math.sin(ang[i])*elapsed_time;
+		
+		if(pos[i].x>screen_dx)
+			pos[i].x = 0;
+		else
+		if(pos[i].x<0)
+			pos[i].x = screen_dx;
+
+		if(pos[i].y>screen_dy)
+			pos[i].y = 0;
+		else
+		if(pos[i].y<0)
+			pos[i].y = screen_dy;
+			
+		if(timer_click>0 && Math.abs(pos[i].x-click_x)<15 && 
+			Math.abs(pos[i].y-click_y)<15) 
+			visible[i] = false;
+	}
+}
+
+function Render() 
+{
+    if (canvas.getContext)
+    {
+        // borro la pantalla
+		ctx.save();
+			
+        ctx.fillStyle = 'rgba(100,255,100,255)';
+        ctx.fillRect(0,0,2000,2000);
+	
+		for(var i=0;i<pos.length;++i)
+		if(visible[i])
+		{
+	
+			var T1 = new Matrix3() , Rot = new Matrix3() , T2 = new Matrix3() ;
+			T1.Traslation(-32 , -32)
+			Rot.Rotation(ang[i] + Math.PI/2);
+			T2.Traslation(pos[i].x ,pos[i].y);
+			var T = T2;
+			T.multiply(Rot);
+			T.multiply(T1);
+			
+			ctx.setTransform(T.a11 , T.a21,T.a12 , T.a22,T.a13 , T.a23);
+			
+			var k = 10;
+			var nro_sprite = ((time*k) % 4) | 0;
+			ctx.drawImage(img_hormiga,nro_sprite*64,0,64,64,
+							0 ,0, 64,64);
+							
+		}	
+
+		ctx.restore();
+		
+		if(timer_click)
+		{
+			var r = (1-timer_click)*30; 
+			ctx.fillStyle = 'rgba(255,255,100,255)';
+			ctx.fillRect(click_x -r ,click_y - r,2*r,2*r);
+		}
+    }
+}
+
+
+
+function RenderLoop() 
+{
+    if (!init)
+		return;
+	Update();
+	Render();
+}
+
+
+function doKeyPress(e) 
+{
+}
+
+
+function doKeyDown(e) 
+{
+	if(e.keyCode>=0 && e.keyCode<255)
+		keyboard[e.keyCode] = true;
+
+}
+
+function doKeyUp(e) 
+{
+	if(e.keyCode>=0 && e.keyCode<255)
+		keyboard[e.keyCode] = false;
+
+}
+
+function onMouseMove() 
+{
+	var xPos = window.event.offsetX;
+	var yPos = window.event.offsetY;
+
+    // actualizo la posicion del mouse
+	mouse_x = xPos;
+	mouse_y = yPos;
+}
+
+function onMouseDown(e) {
+    e = e || window.event;
+    switch (e.which)
+    {
+        case 1:
+            // Left button
+			timer_click = 0.5;
+			click_x = mouse_x;
+			click_y = mouse_y;
+			
+            break;
+        case 2:
+            // middle button
+            break;
+        case 3:
+            // right button
+            break;
+    }
+}
+
+
+function onMouseUp(e) {
+    e = e || window.event;
+    switch (e.which) {
+        case 1:
+            // Left button
+            break;
+        case 2:
+            // middle button
+            break;
+        case 3:
+            // right button
+            break;
+    }
+}
+
+
+
+function main()
+{   
+	document.addEventListener( "keydown", doKeyDown, true);
+	document.addEventListener( "keyup", doKeyUp, true);
+	document.addEventListener( "keypress", doKeyPress, true);
+	document.addEventListener("mousemove", onMouseMove, true);
+	document.addEventListener("mousedown", onMouseDown, true);
+	document.addEventListener("mouseup", onMouseUp, true);
+	for(var i=0;i<255;++i)
+		keyboard[i] = false;
+		
+    canvas = document.getElementById('mycanvas');
+    ctx = canvas.getContext('2d');
+	img_hormiga.src = 'ant.png';
+	
+	for(var i=0;i<32;++i)
+	{
+		pos[i] = new Vector2(Math.random()*screen_dx , Math.random()*screen_dy);
+		ang[i] = Math.random()*2*Math.PI;
+		vel_ang[i] = 1;
+		vel[i] = Math.random()*200 + 100;
+		visible[i] = true;
+	}
+	
+    setInterval(RenderLoop, elapsed_time * 1000);
+	init = true;
+	
+} 
+
+
+</script>
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1000" height="600"></canvas>
+</body>
+</html>
+ 
