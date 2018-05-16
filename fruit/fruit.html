@@ -1,0 +1,66 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript" src="math.js"></script>
+<script type="text/javascript">
+
+var elapsed_time = 1/60;
+var canvas;
+var ctx;
+var mouse_x = 0;
+var mouse_y = 0;
+
+var OX = 50;
+var OY = 50;
+var DX = 600;
+var DY = 500;
+
+var img_fruit = new Image(); 
+var img_dx = 40;
+var img_dy = 30;
+
+var fruit = {x:DX/2 ,
+			 y:DY/2 
+			};
+
+function loadScene()
+{
+	img_fruit.src = 'melon.png';
+}
+
+function RenderLoop() 
+{
+	if (canvas.getContext)
+	{
+		// borro la pantalla
+		ctx.fillStyle = 'rgba(0,0,0,255)';
+		ctx.fillRect(0,0,2*OX+DX,2*OY+DY);
+		
+		// dibujo la fruta
+		ctx.drawImage(img_fruit,fruit.x,fruit.y);
+	}
+}
+
+function onMouseMove() 
+{
+	mouse_x = window.event.offsetX;
+	mouse_y = window.event.offsetY;
+}
+
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	document.addEventListener( "mousemove", onMouseMove, true);
+	ctx = canvas.getContext('2d');
+	loadScene();
+	setInterval(RenderLoop, elapsed_time * 1000);
+} 
+
+
+</script>
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1000" height="700"></canvas>
+</body>
+</html>
+ 

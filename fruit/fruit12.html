@@ -1,0 +1,218 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript" src="math.js"></script>
+<script type="text/javascript">
+
+
+var elapsed_time = 1/60;
+
+var canvas;
+var ctx;
+var mouse_x = 0;
+var mouse_y = 0;
+
+var DX = 600;
+var DY = 500;
+
+var img_fruit = new Image(); 
+var img_fruit_c = new Image(); 
+var img_dx = 40;
+var img_dy = 30;
+
+var fruit = [];
+var left_button = false;
+var time = 0;
+var line_path=[];
+
+function initFruit(i)
+{
+	// le pongo los valores
+	// posicion inicial
+	fruit[i].x0 = 150 + Math.random()*(DX-300);
+	fruit[i].y0 = DY;
+	// posicion actual
+	fruit[i].x = fruit[i].x0;
+	fruit[i].y = fruit[i].y;
+	// le cargo una velocidad inicial 
+	var angulo = 45 + Math.random()*90;
+	fruit[i].vel_x = 100*Math.cos(angulo*Math.PI/180);
+	fruit[i].vel_y = 100*Math.sin(angulo*Math.PI/180);
+	// y un tiempo
+	fruit[i].time = 0;
+	// le agrego un angulo 
+	fruit[i].an = 35;
+	fruit[i].cortada = false;
+	// le pongo un radio 
+	fruit[i].radio = 32;
+
+}
+
+function loadScene()
+{
+	img_fruit.src = 'melon.png';
+	img_fruit_c.src = 'melonc.png';
+	
+	for(var i=0;i<5;++i)
+	{
+		// creo un objeto vacio fruit en la lista
+		fruit[i] = {};
+		// y lo inicializo
+		initFruit(i);
+	}
+}
+
+function Update() 
+{
+	// actualizo la posicion de la fruta
+	for(var i=0;i<fruit.length;++i)
+	{
+		fruit[i].time += 5*elapsed_time;
+		fruit[i].x = fruit[i].x0 + fruit[i].vel_x*fruit[i].time;
+		fruit[i].y = fruit[i].y0 - fruit[i].vel_y*fruit[i].time + 5*fruit[i].time*fruit[i].time;
+		fruit[i].an += elapsed_time;
+		
+		if(fruit[i].y>DY )
+		{
+			// reinicializo el objeto 
+			initFruit(i);
+		}
+	}
+}
+
+
+function RenderLoop() 
+{
+	if (canvas.getContext)
+	{
+		Update();
+	
+		// borro la pantalla
+		ctx.fillStyle = 'rgba(0,0,0,255)';
+		ctx.fillRect(0,0,DX,DY);
+		
+		
+		// consigo la transformacion 
+		for(var i=0;i<fruit.length;++i)
+		if(fruit[i].x>0 && fruit[i].x<DX)
+		{
+				// matriz de rotacion
+			var c = Math.cos(fruit[i].an);
+			var s = Math.sin(fruit[i].an);
+			var matRot = new Matrix3(c,-s,0,
+									 s, c,0,
+									 0, 0,1);
+			
+			// matriz de traslacion al pivote final
+			var matT1 = new Matrix3(1,0,-64/2,
+								  0,1,-64/2,
+								  0,0,1);
+			
+			// -T1
+			var matMT1 = new Matrix3(1,0,64/2,
+								  0,1,64/2,
+								  0,0,1);
+			
+			// matriz de traslacion final
+			var matTF = new Matrix3(1,0,fruit[i].x,
+								  0,1,fruit[i].y,
+								  0,0,1);
+								  
+			// mat = matTF * (-matT1) * matRot * matT1
+			mat = mul_Matrix3(matTF,mul_Matrix3(matMT1 , mul_Matrix3(matRot , matT1)));
+			ctx.setTransform(mat.m11,mat.m21,mat.m12,mat.m22,mat.m13,mat.m23);
+			ctx.drawImage(fruit[i].cortada? img_fruit_c: img_fruit,0,0);
+		}
+
+		// restauro la transformacion
+		ctx.setTransform(1,0,0,1,0,0);
+		
+		
+
+		// dibujo el linepath
+		if(line_path.length>2)
+		{
+			ctx.beginPath();
+			ctx.strokeStyle="#FFAAFF";
+			ctx.lineWidth=3;
+			ctx.moveTo(line_path[0].x, line_path[0].y);
+			for(var i=1;i<line_path.length;++i)
+			{
+				ctx.lineTo(line_path[i].x, line_path[i].y);
+				
+				// Verifico si le pegue a una fruta
+				for(var j=0;j<fruit.length;++j)
+				{
+					var r = fruit[j].radio;
+					var x = fruit[j].x + r;
+					var y = fruit[j].y + r;
+					var px = line_path[i].x;
+					var py = line_path[i].y;
+					var dist2 = (x-px)*(x-px) + (y-py)*(y-py);
+					if(dist2 <r*r)
+						fruit[j].cortada = true;
+				}
+			}
+				
+			ctx.stroke();
+			ctx.lineWidth=1;
+		}
+		
+		
+	}
+}
+
+function onMouseMove() 
+{
+	mouse_x = window.event.offsetX;
+	mouse_y = window.event.offsetY;
+	
+	if(left_button)
+		// estoy agregando puntos al line path
+		line_path[line_path.length] = {x:mouse_x , y:mouse_y};
+	
+}
+
+function onMouseDown(e) {
+    e = e || window.event;
+    switch (e.which)
+    {
+        case 1:
+            // Left button
+			left_button = true;
+			
+			break;
+	}
+}
+
+function onMouseUp(e) {
+    e = e || window.event;
+    switch (e.which)
+    {
+        case 1:
+            // Left button
+			left_button = false;
+			line_path = [];			
+			break;
+	}
+}
+
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	document.addEventListener( "mousemove", onMouseMove, true);
+	document.addEventListener("mousedown", onMouseDown, true);
+	document.addEventListener("mouseup", onMouseUp, true);
+	ctx = canvas.getContext('2d');
+	loadScene();
+	setInterval(RenderLoop, elapsed_time * 1000);
+} 
+
+
+</script>
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="600" height="500"></canvas>
+</body>
+</html>
+ 

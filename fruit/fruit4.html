@@ -1,0 +1,133 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript" src="math.js"></script>
+<script type="text/javascript">
+
+// transformacion final : rotacion + traslacion
+
+var elapsed_time = 1/60;
+
+var canvas;
+var ctx;
+var mouse_x = 0;
+var mouse_y = 0;
+
+var OX = 50;
+var OY = 50;
+var DX = 600;
+var DY = 500;
+
+var img_fruit = new Image(); 
+var img_dx = 40;
+var img_dy = 30;
+
+var fruit = {};
+			
+var time = 0;
+function loadScene()
+{
+	img_fruit.src = 'melon.png';
+
+	// posicion inicial
+	fruit.x0 = 0;
+	fruit.y0 = DY;
+	// posicion actual
+	fruit.x = fruit.x0;
+	fruit.y = fruit.y;
+	// le cargo una velocidad inicial 
+	var angulo = 75;
+	fruit.vel_x = 100*Math.cos(angulo*Math.PI/180);
+	fruit.vel_y = 100*Math.sin(angulo*Math.PI/180);
+	// y un tiempo
+	fruit.time = 0;
+	// le agrego un angulo 
+	fruit.an = 35;
+	
+}
+
+function Update() 
+{
+	// actualizo la posicion de la fruta
+	fruit.time += 5*elapsed_time;
+	fruit.x = fruit.x0 + fruit.vel_x*fruit.time;
+	fruit.y = fruit.y0 - fruit.vel_y*fruit.time + 5*fruit.time*fruit.time;
+	fruit.an += elapsed_time;
+	
+	if(fruit.y>DY)
+	{
+		// reseteo la posicion
+		fruit.time = 0;
+	}
+}
+
+
+function RenderLoop() 
+{
+	if (canvas.getContext)
+	{
+		Update();
+	
+		// borro la pantalla
+		ctx.fillStyle = 'rgba(0,0,0,255)';
+		ctx.fillRect(0,0,2*OX+DX,2*OY+DY);
+		
+		
+		// consigo la transformacion 
+		
+		// matriz de rotacion
+		var c = Math.cos(fruit.an);
+		var s = Math.sin(fruit.an);
+		var matRot = new Matrix3(c,-s,0,
+								 s, c,0,
+								 0, 0,1);
+		
+		// matriz de traslacion al pivote final
+		var matT1 = new Matrix3(1,0,-64/2,
+						      0,1,-64/2,
+							  0,0,1);
+		
+		// -T1
+		var matMT1 = new Matrix3(1,0,64/2,
+						      0,1,64/2,
+							  0,0,1);
+		
+		// matriz de traslacion final
+		var matTF = new Matrix3(1,0,fruit.x,
+						      0,1,fruit.y,
+							  0,0,1);
+							  
+		// mat = matTF * (-matT1) * matRot * matT1
+		mat = mul_Matrix3(matTF,mul_Matrix3(matMT1 , mul_Matrix3(matRot , matT1)));
+		ctx.setTransform(mat.m11,mat.m21,mat.m12,mat.m22,mat.m13,mat.m23);
+		ctx.drawImage(img_fruit,0,0);
+
+		// restauro la transformacion
+		ctx.setTransform(1,0,0,1,0,0);
+		
+	}
+}
+
+function onMouseMove() 
+{
+	mouse_x = window.event.offsetX;
+	mouse_y = window.event.offsetY;
+}
+
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	document.addEventListener( "mousemove", onMouseMove, true);
+	ctx = canvas.getContext('2d');
+	loadScene();
+	setInterval(RenderLoop, elapsed_time * 1000);
+} 
+
+
+</script>
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1000" height="700"></canvas>
+</body>
+</html>
+ 
