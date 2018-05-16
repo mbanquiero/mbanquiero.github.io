@@ -1,0 +1,171 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript" src="math.js"></script>
+<script type="text/javascript" src="engine2d.js"></script>
+<script type="text/javascript" src="keyboard.js"></script>
+<script type="text/javascript">
+
+
+
+var img_nave = new Image(); 
+var img_nave_enemiga = new Image(); 
+
+// para calcular el escalado precisamos la dimension del bitmap 
+var img_dx = 40;
+var img_dy = 30;
+
+var DX = 600;
+var DY = 500;
+var p_nave
+
+function Init()
+{
+	// la nave
+	img_nave.src = 'nave.png';
+	img_nave_enemiga.src = 'nave2.png';
+	p_nave = _scene.addMesh(img_nave , 300,300,40,40,0);
+	p_nave.enemigo = false;
+	
+	// nave enemiga
+	var p_aux = _scene.addMesh(img_nave_enemiga , 100,100,40,40,0);
+	p_aux.enemigo = true;
+	p_aux.chasing = false;
+	p_aux.an = 180;
+
+	document.addEventListener("touchstart", movespaceShip, true);	
+	
+}
+
+
+function movespaceShip(event)
+{ 
+	var eventTouch = event.changedTouches[0];// Array to store previous touch cords,0 is the initial one.
+	
+	var x = eventTouch.pageX;
+	var y = eventTouch.pageY;
+	p_nave.an = Math.atan2(p_nave.pos.y - y , p_nave.pos.x - x) * 180 / Math.PI;
+	
+	
+}
+
+
+// esta funcion se llama por el motor cada vez que tiene que actualizar la matriz de transform del objeto
+function Update(obj)
+{
+	var speed = 150;
+	
+	if(obj.enemigo)
+	{
+		// enemigo
+		// computo el vector de velocidad 
+		var alfa = obj.an / 180 * Math.PI;
+		var vel = new Vector2(-Math.cos(alfa) , -Math.sin(alfa) );
+		
+		// computo el vector velocidad deseada
+		var vel_deseada = vec2_substract(p_nave.pos , obj.pos);
+		vel_deseada.normalize();
+	
+		if(obj.chasing)
+		{
+			var N = cross3d(  {x:vel.x , y:vel.y , z:0 } , {x:vel_deseada.x , y:vel_deseada.y , z:0});
+			if(N.z<0)
+				obj.an -= elapsed_time*150;
+			else
+				obj.an += elapsed_time*150;
+		}
+		else
+		{
+			speed = 0;
+			var d = dot(vel , vel_deseada);
+			if(d>0.707)
+				obj.chasing = true;
+		}
+	}
+	else
+	{
+		// player
+		if(IsKeyPressed(KEY_ARROW_LEFT)) 
+			obj.an -= elapsed_time*150;
+		else
+		if(IsKeyPressed(KEY_ARROW_RIGHT)) 
+			obj.an += elapsed_time*150;
+	}
+		
+	// computo el vector de velocidad 
+	var alfa = obj.an / 180 * Math.PI;
+	var vel = new Vector2(-Math.cos(alfa) , -Math.sin(alfa) );
+	// pos = pos + vel * tiempo
+	obj.pos = vec2_add(obj.pos , vec2_multiply(vel, elapsed_time*speed));
+
+	var max_x = DX;
+	var max_y = DY;
+	if(obj.pos.x <0)
+		obj.pos.x = max_x;
+	else
+	if(obj.pos.x >max_x)
+		obj.pos.x = 0;
+		
+	if(obj.pos.y <0)
+		obj.pos.y = max_y;
+	else
+	if(obj.pos.y>max_y)
+		obj.pos.y = 0;
+	
+	var traslacion = new Matrix3(	1,0,obj.pos.x,
+										0,1,obj.pos.y,
+										0,0,1);
+	var escalado = new Matrix3(		obj.dx / img_dx,0,0,
+									0,obj.dy / img_dy,0,
+									0,0,1);
+									
+	var s = Math.sin(obj.an / 180 * Math.PI );
+	var c = Math.cos(obj.an / 180 * Math.PI );
+	var rotacion = new Matrix3(		s,c,0,
+										-c,s,0,
+										0,0,1);
+	// World = Trasacion x Escalado x Rotacion
+	// quiero que rote sobre el centro de gravedad! 
+	var t1 = new Matrix3(	1,0,-obj.dx/2,
+							0,1,-obj.dy/2,
+							0,0,1);
+	
+	// escalo y traslado el centro de gravedad al origen
+	obj.transform = mul_Matrix3(t1 , escalado);
+
+	// ahora roto 
+	obj.transform = mul_Matrix3(rotacion , obj.transform);
+
+	// traslado a donde quiere estar 
+	obj.transform = mul_Matrix3(traslacion, obj.transform);
+	
+}
+
+function Render()
+{
+	// dibujo la escena
+	_scene.render();
+		
+	// debug 
+	for(var i=0;i<_scene.meshes.length;++i)
+	{
+		var p_aux = _scene.meshes[i];
+		// computo el vector de velocidad 
+		var alfa = p_aux.an / 180 * Math.PI;
+		var vel = new Vector2(-Math.cos(alfa) , -Math.sin(alfa) );
+		ctx.beginPath();
+		ctx.moveTo(p_aux.pos.x , p_aux.pos.y);
+		ctx.lineTo(p_aux.pos.x + 50* vel.x , p_aux.pos.y+ 50* vel.y);
+		ctx.strokeStyle = '#ff0000';
+		ctx.stroke();	
+	}
+}
+
+
+</script>
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="600" height="500"></canvas>
+</body>
+</html>
+ 
