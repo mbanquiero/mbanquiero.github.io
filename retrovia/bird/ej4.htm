@@ -1,0 +1,105 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+
+<script type="text/javascript" src="math.js"></script>
+
+<script type="text/javascript">
+
+var canvas;
+var ctx;
+
+var img_vaso= new Image(); 
+var img_cuerpo = new Image(); 
+var img_patas = new Image(); 
+var an = 0;
+
+function RenderLoop() 
+{
+	if(canvas.getContext)
+	{
+		// borro la pantalla
+		ctx.fillStyle = 'rgba(255,255,255,255)';
+		ctx.fillRect(0,0,2000,2000);
+		ctx.save();
+		dibujar_vaso();
+		dibujar_cuerpo();
+		dibujar_patas();
+		ctx.restore();
+
+	}
+}
+
+function dibujar_vaso()
+{
+	var x = canvas.width / 2 - img_vaso.width + 80;
+	var y = canvas.height - img_vaso.height - 10;
+	var mat = new Matrix3(	1,0,x,
+							0,1,y,
+							0,0,1);
+	// Seteo la trans. en el canvas
+	ctx.setTransform(mat.m11,mat.m21,mat.m12,mat.m22,mat.m13,mat.m23);
+	// Dibujo el mesh
+	ctx.drawImage(img_vaso,0,0);
+}
+
+
+function dibujar_patas()
+{
+	var x = canvas.width / 2 + img_patas.width + 10;
+	var y = canvas.height - img_patas.height - 10;
+	var mat = new Matrix3(	1,0,x,
+							0,1,y,
+							0,0,1);
+	// Seteo la trans. en el canvas
+	ctx.setTransform(mat.m11,mat.m21,mat.m12,mat.m22,mat.m13,mat.m23);
+	// Dibujo el mesh
+	ctx.drawImage(img_patas,0,0);
+}
+
+function dibujar_cuerpo()
+{
+	var x = canvas.width / 2 ;
+	var y = canvas.height - img_cuerpo.height - 55;
+	
+	// traslacion al lugar
+	var T = new Matrix3(	1,0,x,
+							0,1,y,
+							0,0,1);
+							
+	// rotacion por un angulo
+	an += 0.05;
+	var s = Math.sin(an);
+	var c = Math.cos(an);
+	var R = new Matrix3(	s,c,0,
+							-c,s,0,
+							0,0,1);
+							
+	// compongo la transformacion
+	var mat = mul_Matrix3(R , T);
+							
+	// Seteo la trans. en el canvas
+	ctx.setTransform(mat.m11,mat.m21,mat.m12,mat.m22,mat.m13,mat.m23);
+	// Dibujo el mesh
+	ctx.drawImage(img_cuerpo,0,0);
+}
+
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	ctx = canvas.getContext('2d');
+	img_vaso.src = 'vaso.png';
+	img_patas.src = 'patas.png';
+	img_cuerpo.src = 'cuerpo.png';
+	setInterval(RenderLoop, 100);
+} 
+
+
+
+</script>
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="800" height="600" style="border:1px solid #c3c3c3;"></canvas>
+</body>
+</html>
+ 
