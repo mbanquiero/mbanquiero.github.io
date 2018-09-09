@@ -296,7 +296,12 @@
 	var vLookAt = [0, 0, 0];
     function render(elapsed_time) {
 			
-		
+			var x = vLookFrom[0];
+		var z = vLookFrom[2];
+		var an = elapsed_time * 0.0001;
+		vLookFrom[0] = x*Math.cos(an) - z*Math.sin(an);
+		vLookFrom[2] = x*Math.sin(an) + z*Math.cos(an);
+	
 		time += elapsed_time;
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 		gl.useProgram(postProcessProgram);
