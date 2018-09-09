@@ -1,7 +1,35 @@
-
-
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tutoriales de WEBGL - Ejemplo Ray Marching</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+
+.column {
+    float: left;
+    padding: 10px;
+}
+
+.left {
+  width: 75%;
+}
+
+.right {
+  width: 25%;
+}
+
+.row:after {
+    content: "";
+    display: table;
+    clear: both;
+}
+</style>
+
+
 
 <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
 
@@ -305,7 +333,7 @@
         var fov = Math.PI/4.0;
         var k = 2 * Math.tan(fov / 2);
         var Dy = vec3.create();
-		vec3.scale(U,k*0.6,Dy);
+		vec3.scale(U,k*0.7,Dy);
         var Dx = vec3.create();
 		vec3.scale(V,k,Dx);
 		
@@ -447,9 +475,29 @@ function onMouseWheel(e) {
 	vLookFrom[2] = vLookAt[2] + viewdir[2]*dist; 
 }
 
+    function getStrShader(id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+		return str;
+	}
+	
 	
 
     function webGLStart() {
+		
+			var str = getStrShader("postprocess-fs");
+        document.getElementById("fractal").value = str;
 		
 		document.addEventListener("mousemove", onMouseMove, true);
 		document.addEventListener("mousedown", onMouseDown, true);
@@ -473,6 +521,14 @@ function onMouseWheel(e) {
 
 
 <body onload="webGLStart();">
-    <canvas id="canvas" style="border: none;" width="1000" height="600"></canvas>
+<div class="row">
+  <div class="column" style="background-color:#aaa;">
+	<canvas id="canvas" style="border: none;" width="800" height="600"></canvas>
+  </div>
+  <div class="column" style="background-color:#bbb;">
+	<textarea id="fractal" cols="60" rows="40"></textarea>	
+	</div>
+  </div>
+</div>
 </body>
 </html>
