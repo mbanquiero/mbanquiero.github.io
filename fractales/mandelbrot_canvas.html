@@ -1,0 +1,98 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript">
+
+var canvas;
+var ctx;
+
+// los numeros complejos se pueden escribir en js como un vector de 2 elementos 
+// ejemplo
+// var c = [0,0];			el nro complejo cero
+// var c = [0,1];			el i 
+// pero no implementa ni suma ni multiplicacion, etc. los cuales hay que hacerlos a mano: 
+
+// implementa la multplicacion de 2 complejos
+function cmul(A ,  B)
+{
+	var a = A[0];
+	var b = A[1];
+	var c = B[0];
+	var d = B[1];
+	return [a*c - b*d , a*d + b*c];
+}
+
+// devuelve el modulo al cuadrado (lenght squared) de un complejo. 
+// en vez de preguntar si el modulo < 4, por ejemplo, para evitar la raiz, se pregunta modulo^2 < 16 y se evita una operacion de raiz
+function lenghtsq(A)
+{
+	return A[0]*A[0] + A[1]*A[1];
+}
+
+function draw() 
+{
+	// borro la pantalla
+	ctx.fillStyle = 'rgba(0,0,0,255)';
+	ctx.fillRect(0,0,1200,1200);
+	// recorro toda la pantalla, si es la columna y sj la fila, en total hay 1200 x 600 pixeles. 
+	for(var si=0;si<1200;++si)
+		for(var sj=0;sj<600;++sj)
+		{
+			var k = 2.25;			// este es un factor de escala
+			// paso del espacio de pantalla (pixeles) al espacio de los complejos, quiero que el cero me quede
+			// en la mitad de la pantalla y la y positiva vaya para arriba 
+			var x =  2 * (si/800) - 1;
+			var y = 1.0 - 2.0 * (sj/600);
+			var c = [x*k-0.7,y*k];				// el nro complejo que estoy evaluando es c, 
+			// que basicamente es el x,y pero que le aplico una escala y desplzao un poco la x para que quede mas centrada la imagen
+			
+			// algoritmo de escape pp dicho.
+			// la formula que evalua es zn <- (zn-1) ^2 + c 
+			
+			var z0 = [0,0];
+			var zn = [0,0];
+			var j = 0;
+			// maximo hago 20 iteraciones: 
+			for(var i = 0;i<20;++i)
+			{		
+				j = i;						// guardo el valor de la variable i que representa la cantidad de pasos 
+				zn = cmul(zn,zn);
+				zn[0] += c[0];
+				zn[1] += c[1];
+				
+				// si el modulo del complejo zn es mayor a 4 termino la secuencia
+				// quiere decir que el complejo c no pertenece al conjunto M
+				if(lenghtsq(zn) >	16.0)
+					break;
+			}
+			
+			// la variable j tiene la cantidad de pasos hasta que zn diverge o bien 20 si no llego a diverger 
+			// uso ese valor para colorear el conjunto. Cuanto mas rapido diverge, mas pequeño es j, y por ende mas negro
+			// el color del pixel, en cambio si el punto pertenece a M j va a ser 20, y el color es el rojo intenso. 
+			var r = 255-j*22;
+			var g = 255-j*22;
+			var b = 255-j*22;
+			
+			// dibuja el pixel pp dicho en la posicion de pantalla. 
+			ctx.fillStyle = "rgba("+r+","+g+","+b+",1)";
+			ctx.fillRect( si, sj, 1, 1 );		
+		}
+
+}
+
+  
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	ctx = canvas.getContext('2d');
+	draw();
+} 
+
+</script>
+
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1200" height="600" style="float:left"></canvas>
+</body>
+</html>
+ 

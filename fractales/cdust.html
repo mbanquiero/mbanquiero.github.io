@@ -137,7 +137,7 @@
 			//col = vec3(1.0, 0.0, 1.0);
 		}		
 		
-		gl_FragColor = vec4(col, 1.0);		
+		gl_FragColor = vec4(1.0 - col, 1.0);		
 
 	}
 	
@@ -324,7 +324,7 @@
 			
 			var x = vLookFrom[0];
 		var z = vLookFrom[2];
-		var an = elapsed_time * 0.0001;
+		var an = elapsed_time * 0.000;
 		vLookFrom[0] = x*Math.cos(an) - z*Math.sin(an);
 		vLookFrom[2] = x*Math.sin(an) + z*Math.cos(an);
 	

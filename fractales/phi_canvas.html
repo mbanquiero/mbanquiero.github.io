@@ -1,0 +1,166 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript">
+
+var canvas;
+var ctx;
+
+// los numeros complejos se pueden escribir en js como un vector de 2 elementos 
+// ejemplo
+// var c = [0,0];			el nro complejo cero
+// var c = [0,1];			el i 
+// pero no implementa ni suma ni multiplicacion, etc. los cuales hay que hacerlos a mano: 
+
+// implementa la multplicacion de 2 complejos
+function cmul(A ,  B)
+{
+	var a = A[0];
+	var b = A[1];
+	var c = B[0];
+	var d = B[1];
+	return [a*c - b*d , a*d + b*c];
+}
+
+
+function cpow(A ,  N)
+{
+	var a = A[0];
+	var b = A[1];
+	var r = Math.sqrt(a*a + b*b);
+	var theta = Math.atan2(b,a);
+	var rn = Math.pow(r,N);
+	return [Math.cos(N*theta) * rn , Math.sin(N*theta) * rn];
+}
+
+// devuelve el modulo al cuadrado (lenght squared) de un complejo. 
+// en vez de preguntar si el modulo < 4, por ejemplo, para evitar la raiz, se pregunta modulo^2 < 16 y se evita una operacion de raiz
+function lenghtsq(A)
+{
+	return A[0]*A[0] + A[1]*A[1];
+}
+
+function M(si,sj)
+{
+	var k = 1;			// este es un factor de escala
+	// paso del espacio de pantalla (pixeles) al espacio de los complejos, quiero que el cero me quede
+	// en la mitad de la pantalla y la y positiva vaya para arriba 
+	var x =  2 * (si/1200) - 1;
+	var y = 1.0 - 2.0 * (sj/600);
+	var c = [x*k,y*k];				// el nro complejo que estoy evaluando es c, 
+	// que basicamente es el x,y pero que le aplico una escala y desplzao un poco la x para que quede mas centrada la imagen
+	
+	// algoritmo de escape pp dicho.
+	// la formula que evalua es zn <- (zn-1) ^2 + c 
+	
+	var z0 = [0,0];
+	var zn = [0,0];
+	var j = 0;
+	// maximo hago 20 iteraciones: 
+	for(var i = 0;i<20;++i)
+	{		
+		j = i;						// guardo el valor de la variable i que representa la cantidad de pasos 
+		zn = cmul(zn,zn);
+		zn[0] += c[0];
+		zn[1] += c[1];
+		
+		// si el modulo del complejo zn es mayor a 4 termino la secuencia
+		// quiere decir que el complejo c no pertenece al conjunto M
+		if(lenghtsq(zn) >	16.0)
+			return 0;
+	}
+
+	return 1;
+}
+
+
+function Phi(si,sj)
+{
+	var k = 1;			// este es un factor de escala
+	// paso del espacio de pantalla (pixeles) al espacio de los complejos, quiero que el cero me quede
+	// en la mitad de la pantalla y la y positiva vaya para arriba 
+	var x =  2 * (si/1200) - 1;
+	var y = 1.0 - 2.0 * (sj/600);
+	var c = [x*k,y*k];				// el nro complejo que estoy evaluando es c, 
+	// que basicamente es el x,y pero que le aplico una escala y desplzao un poco la x para que quede mas centrada la imagen
+	
+	// algoritmo de escape pp dicho.
+	// la formula que evalua es zn <- (zn-1) ^2 + c 
+	
+	var z0 = [0,0];
+	var zn = [0,0];
+	var j = 0;
+	// maximo hago 20 iteraciones: 
+	for(var i = 0;i<10;++i)
+	{		
+		j = i;						// guardo el valor de la variable i que representa la cantidad de pasos 
+		zn = cmul(zn,zn);
+		zn[0] += c[0];
+		zn[1] += c[1];
+		
+		// si el modulo del complejo zn es mayor a 4 termino la secuencia
+		// quiere decir que el complejo c no pertenece al conjunto M
+		if(lenghtsq(zn) >	4)
+			break;
+	}
+
+	var N = j;		// cantidad de iteraciones
+	var q = cpow(zn, 1 / Math.pow(2,N)); 
+	
+	return q;
+
+	
+}
+
+
+
+function draw() 
+{
+	// borro la pantalla
+	ctx.fillStyle = 'rgba(0,0,0,255)';
+	ctx.fillRect(0,0,1200,1200);
+	// recorro toda la pantalla, si es la columna y sj la fila, en total hay 1200 x 600 pixeles. 
+	ctx.fillStyle = 'rgba(255,0,0,255)';
+	for(var si=0;si<1200;si+=5)
+		for(var sj=0;sj<600;sj+=5)
+		{
+			var a = M(si,sj) + M(si+5,sj) + M(si,sj+5)+ M(si+5,sj+5);
+			if(a!=0 && a!=4 )
+			{
+				// el pixel esta en el borde 
+				//	ctx.fillRect( si, sj, 5, 5 );		
+				
+				// le calculo phi a ver a donde lo manda
+				var pt = Phi(si,sj);
+				var s = lenghtsq(pt);
+				if(Math.abs(s-1)<0.01)
+				{
+					ctx.fillRect( si, sj, 5, 5 );		
+					var x = (1+pt[0]) * 300;
+					var y = (1+pt[1]) * 150;
+					ctx.fillRect( x, y, 5, 5 );		
+				}
+				
+				
+			}
+					
+		}
+
+}
+
+  
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	ctx = canvas.getContext('2d');
+	draw();
+} 
+
+</script>
+
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1200" height="600" style="float:left"></canvas>
+</body>
+</html>
+ 

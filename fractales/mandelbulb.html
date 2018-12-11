@@ -2,32 +2,8 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Técnicas de Gráficos x Computadora - Sponge</title>
-<style>
-* {
-    box-sizing: border-box;
-}
+<title>Mandelbulb</title>
 
-
-.column {
-    float: left;
-    padding: 10px;
-}
-
-.left {
-  width: 75%;
-}
-
-.right {
-  width: 25%;
-}
-
-.row:after {
-    content: "";
-    display: table;
-    clear: both;
-}
-</style>
 
 <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
 
@@ -40,75 +16,59 @@
     uniform vec3 vViewDir;
     uniform vec3 Dx;
     uniform vec3 Dy;
-	
-	float hash( float n )
-	{
-		return fract(sin(n)*43758.5453);
-	}
 
-	float noise( vec3 x )
+	vec2 cmul(vec2 A , vec2 B)
 	{
-		vec3 p = floor(x);
-		vec3 f = fract(x);
-		f       = f*f*(3.0-2.0*f);
-		float n = p.x + p.y*57.0 + 113.0*p.z;
-		return mix(mix(mix( hash(n+0.0), hash(n+1.0),f.x),
-					   mix( hash(n+57.0), hash(n+58.0),f.x),f.y),
-				   mix(mix( hash(n+113.0), hash(n+114.0),f.x),
-					   mix( hash(n+170.0), hash(n+171.0),f.x),f.y),f.z);
+		float a = A.x;
+		float b = A.y;
+		float c = B.x;
+		float d = B.y;
+		return vec2(a*c - b*d , a*d + b*c);
 	}
 	
-	
-	// signed distance - Box 
-	float sdBox( vec3 p, vec3 b )
-	{
-		vec3 d = abs(p) - b;
-		return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
-	}
-
-	// signed distance - Cross 
-	float sdCross( in vec3 p )
-	{
-		float inf = 1000.0;		// infinito :)
-		float da = sdBox(p.xyz,vec3(inf,1.0,1.0));
-		float db = sdBox(p.yzx,vec3(1.0,inf,1.0));
-		float dc = sdBox(p.zxy,vec3(1.0,1.0,inf));
-		return min(da,min(db,dc));
-	}
-	
-	float sponge(vec3 p) 
-	{
-		p*=0.5;
-		p += noise(p);
-		p = mod(p , 3.0) - 1.5;
-		float d = sdBox(p,vec3(1.0));
-
-	   float s = 1.0;
-	   for( int m=0; m<10; m++ )
-	   {
-		  vec3 a = mod( p*s, 2.0 )-1.0;
-		  s *= 3.0;
-		  vec3 r =  3.0*abs(a) - 1.0;
-		  float c = sdCross(r)/s;		  
-		  d = max(d,c);	
-		}
-		
-		return d;
-	}
 
 	// Algoritmo de Ray marching Estandar
-
-	float map(vec3 p) {
-		return sponge(p);
+	
+	float escape_time;
+	int escape_iteration;
+	float map(vec3 pos) {
+		//pos = mod(pos, 3.0) - 1.5;
+		vec3 z = pos;
+		float dr = 1.0;
+		float r = 0.0;
+		for (int i = 0; i < 10; i++) {
+			
+			escape_time = r = length(z);
+			escape_iteration = i;
+			if (r>16.0) break;
+		
+		// lo paso a polares
+		float Power = 1.0 + mod(time*0.0005,20.0);
+		//float Power = 8.0;
+		float theta = acos(z.z/r);
+		float phi = atan(z.y,z.x);
+		dr =  pow( r, Power-1.0)*Power*dr + 1.0;
+		
+		// escala y rota 
+		float zr = pow( r,Power);
+		theta = theta*Power;
+		phi = phi*Power;
+		
+		// volvemos a coordenas cartesianas
+		z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta));
+		z+=pos;
 	}
-
+	return 0.5*log(r)*r/dr;
+	}
 
 	vec3 calcNormal(vec3 p) 
 	{
-		vec2 e = vec2(0.01, 0.0);
-		return normalize(vec3( 	map(p + e.xyy) - map(p - e.xyy),
-                            map(p + e.yxy) - map(p - e.yxy),
-                          	map(p + e.yyx) - map(p - e.yyx)));
+		
+    vec2 e = vec2(1.0,-1.0)*0.001;
+    return normalize( e.xyy*map( p + e.xyy ) + 
+					  e.yyx*map( p + e.yyx ) + 
+					  e.yxy*map( p + e.yxy ) + 
+					  e.xxx*map( p + e.xxx ) );							
 	}
 	
 	
@@ -133,14 +93,14 @@
 		float x = 2.0 * vTextureCoord.x - 1.0;
 		float y = 1.0 - 2.0 * vTextureCoord.y;
 		vec3 rd = normalize(vViewDir - Dy*y + Dx*x);	
-		vec3 ro = -vViewDir * (4.5 - time*0.0005);
-		//vec3 ro = vEye;
+		//vec3 ro = -vViewDir * 1.3;
+		vec3 ro = vEye;
 		
-		vec3 col = vec3(0.0);
-		float tmax = 20.0;
-		float h = 1.5;
+		vec3 col = vec3(1.0);
+		float tmax = 50.0;
+		float h = 0.5;
 		float t = 0.0;
-		for(int i = 0; i < 64; i++) {
+		for(int i = 0; i < 128; i++) {
 			if (h < 0.001 || h > tmax) break;
 			h = map( ro + rd * t);
 			t += h;
@@ -152,7 +112,18 @@
 			vec3  P = ro + t*rd;
 			vec3  N = calcNormal(P);
 			float s = shadow( P, L);		
-			col = fract(P) * dot(N ,L) * s + vec3(0.1, 0.1, 0.1);
+			//vec3 color_base = vec3(float(escape_iteration)/10.0+0.3, log(log(escape_time))*0.1+0.3 , 1.0);
+			vec3 color_base = vec3(1.0);
+
+			/*
+			vec3 color_base;
+			float r = length(P);
+			if(r>1.0)
+				color_base = vec3(r /5.0 , 0.0 , 0.0);
+			else
+				color_base = vec3(r * 0.2);
+			*/
+			col =   color_base* abs(dot(N ,L)) * s + vec3(0.1);
 		}		
 		
 		gl_FragColor = vec4(col, 1.0);		
@@ -194,6 +165,16 @@
 	var eventoInterno = EV_NADA;
 	var mouse_x = 0;
 	var mouse_y = 0;
+	
+	function makeBasis(Tg , Bt, N) {
+		vec3.normalize(Tg);
+		vec3.cross([0,1,0], Tg,Bt);
+		vec3.normalize(Bt);
+		vec3.cross(Tg, Bt,N);
+		vec3.normalize(N);
+	}
+	
+	
 
 	function makeLookAt(cameraPosition, target, up, matView) {
 	var xAxis = vec3.create();
@@ -336,17 +317,27 @@
 	
 	// render loop
 	var time = 0;
-	var vLookFrom = [320, 220, 220];
+	var vLookFrom = [-1, 1, -1];
 	var vLookAt = [0, 0, 0];
+	var vel = [1,-1,1];
+	var Normal = [0,0,0];
+	var BiTangente = [0,0,0];
+	
     function render(elapsed_time) {
-			
-				var x = vLookFrom[0];
-		var z = vLookFrom[2];
-		var an = elapsed_time * 0.0001;
-		vLookFrom[0] = x*Math.cos(an) - z*Math.sin(an);
-		vLookFrom[2] = x*Math.sin(an) + z*Math.cos(an);
-
+		
+		var k = 0.00001;
+		vLookFrom[0] += vel[0]*elapsed_time*k;
+		vLookFrom[1] += vel[1]*elapsed_time*k;
+		vLookFrom[2] += vel[2]*elapsed_time*k;
+		
+		vLookAt[0] = vLookFrom[0] + vel[0];
+		vLookAt[1] = vLookFrom[1] + vel[1];
+		vLookAt[2] = vLookFrom[2] + vel[2];
+		
 		time += elapsed_time;
+			
+		
+		
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 		gl.useProgram(postProcessProgram);
         gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
@@ -354,7 +345,7 @@
 		gl.uniform1i(postProcessProgram.samplerUniform, 0);
         gl.uniform1f(gl.getUniformLocation(postProcessProgram, "time"), time);
         gl.uniform3fv(gl.getUniformLocation(postProcessProgram, "vEye"), vLookFrom);
-		
+
 		var vViewDir = vec3.create();
 		vec3.subtract(vLookAt,vLookFrom,vViewDir)
 		vec3.normalize(vViewDir)
@@ -412,12 +403,19 @@ function onMouseMove()
 	    case EV_3D_REALTIME:
 			var dx = xPos - mouse_x;
 			var dy = yPos - mouse_y;
-			vLookFrom[1] += dy;
-			var x = vLookFrom[0];
-			var z = vLookFrom[2];
-			var an = dx / 800 * 3.1415;
-			vLookFrom[0] = x*Math.cos(an) - z*Math.sin(an);
-			vLookFrom[2] = x*Math.sin(an) + z*Math.cos(an);
+			var an_x = -dx / 800 * 3.1415;
+			var an_y = dy / 800 * 3.1415;
+			var MRot = mat4.create();
+			mat4.identity(MRot);
+			mat4.rotate(MRot,an_y, Normal, MRot);
+			mat4.multiplyVec3(MRot,vel,vel);
+			mat4.multiplyVec3(MRot,BiTangente,BiTangente);
+			
+			mat4.identity(MRot);
+			mat4.rotate(MRot,an_x, BiTangente, MRot);
+			mat4.multiplyVec3(MRot,vel,vel);
+			mat4.multiplyVec3(MRot,Normal,Normal);
+			
 	        break;
 
 	    case EV_PAN_REALTIME:
@@ -431,7 +429,7 @@ function onMouseMove()
 			vec3.cross([0,1,0], zAxis,xAxis);
 			vec3.normalize(xAxis);
 			vec3.cross(zAxis, xAxis,yAxis);
-			var k = 0.5;
+			var k = 0.05;
 			var desf_x = -xAxis[0]*dx*k + yAxis[0]*dy*k;
 			var desf_y = -xAxis[1]*dx*k + yAxis[1]*dy*k;
 			var desf_z = -xAxis[2]*dx*k + yAxis[2]*dy*k;
@@ -512,7 +510,7 @@ function onMouseWheel(e) {
 	vLookFrom[2] = vLookAt[2] + viewdir[2]*dist; 
 }
 
-function getStrShader(id) {
+    function getStrShader(id) {
         var shaderScript = document.getElementById(id);
         if (!shaderScript) {
             return null;
@@ -528,19 +526,17 @@ function getStrShader(id) {
         }
 		return str;
 	}
-
-
 	
 
     function webGLStart() {
 		
-		var str = getStrShader("postprocess-fs");
-        document.getElementById("fractal").value = str;
 		document.addEventListener("mousemove", onMouseMove, true);
 		document.addEventListener("mousedown", onMouseDown, true);
 		document.addEventListener("mouseup", onMouseUp, true);
 		document.addEventListener("mousewheel", onMouseWheel, true);
-
+		
+		makeBasis(vel , Normal , BiTangente);
+		
         var canvas = document.getElementById("canvas");
         initGL(canvas);
         initShaders();
@@ -559,13 +555,7 @@ function getStrShader(id) {
 
 <body onload="webGLStart();">
 <div class="row">
-  <div class="column" style="background-color:#aaa;">
-	<canvas id="canvas" style="border: none;" width="800" height="600"></canvas>
-  </div>
-  <div class="column" style="background-color:#bbb;">
-	<textarea id="fractal" cols="60" rows="40"></textarea>	
-	</div>
-  </div>
+	<canvas id="canvas" style="border: none;" width="1200" height="600"></canvas>
 </div>
 </body>
 </html>

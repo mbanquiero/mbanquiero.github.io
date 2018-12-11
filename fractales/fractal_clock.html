@@ -1,0 +1,636 @@
+
+
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Fractal clock </title>
+
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+	varying vec4 vColor;
+	uniform mediump int shadows;
+    void main(void) {
+		gl_FragColor = shadows==1? vec4(0,0,0,1) : vColor;
+    }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+	uniform mediump int shadows;
+    uniform vec3 vLightPos;
+	
+    uniform mat4 matWorld;
+    uniform mat4 matView;
+    uniform mat4 matProj;
+
+	varying vec4 vColor;
+    void main(void) {
+	
+		vec4 position = vec4(aVertexPosition, 1.0)* matWorld;
+		if(shadows==1)
+		{	
+			float dy = vLightPos.y-position.y;
+			position.x = (vLightPos.y*position.x - position.y* vLightPos.x)/dy;
+			position.z = (vLightPos.y*position.z - position.y* vLightPos.z)/dy;
+			position.y = 0.0;
+			
+		}
+	
+        gl_Position = matProj * matView * position;
+		vColor = vec4(1.0,0.0,0.0,1.0);
+    }
+</script>
+
+
+<script id="postprocess-fs" type="x-shader/x-fragment">
+    precision mediump float;
+	varying vec2 vTextureCoord;
+	uniform sampler2D uSampler;	
+	uniform float time;
+    void main(void) {
+
+		float R = 0.0 , G = 0.0 , B = 0.0;
+		const int r = 3;
+		for(int i=-r;i<=r;i+=1)
+		for(int j=-r;j<=r;j+=1)
+		{
+			vec3 clr = texture2D(uSampler, vTextureCoord+vec2(float(i)/1024.0,float(j)/1024.0)).rgb;
+			R = max(R, clr.r);
+			G = max(G, clr.g);
+			B = max(B, clr.b);
+		}
+
+		gl_FragColor = vec4(R,G,B,1.0);
+
+//		gl_FragColor = texture2D(uSampler, vTextureCoord);
+		
+	}
+	
+</script>
+
+<script id="postprocess-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec2 aVertexTexCoords;
+	uniform sampler2D uSampler;	
+	varying vec2 vTextureCoord;
+	
+    void main(void) {
+		
+        gl_Position = vec4(aVertexPosition , 1.0);
+		vTextureCoord = aVertexTexCoords;
+    }
+</script>
+
+
+
+
+<script type="text/javascript">
+
+
+var dist_luz = 10000;
+
+// Eventos
+var EV_NADA				= 0;
+var EV_PAN_REALTIME		= 1;
+var EV_3D_REALTIME		= 2;
+var eventoInterno = EV_NADA;
+var mouse_x = 0;
+var mouse_y = 0;
+
+	function makeLookAt(cameraPosition, target, up, matView) {
+	var xAxis = vec3.create();
+	var yAxis = vec3.create();
+	var zAxis = vec3.create();
+	
+	vec3.subtract(cameraPosition, target,zAxis)
+	vec3.normalize(zAxis);
+	vec3.cross(up, zAxis,xAxis);
+	vec3.normalize(xAxis);
+	vec3.cross(zAxis, xAxis,yAxis);
+
+	var tx = vec3.dot(xAxis,cameraPosition);
+	var ty = vec3.dot(yAxis,cameraPosition);
+	var tz = vec3.dot(zAxis,cameraPosition);
+
+	return [
+			xAxis[0] , yAxis[0] , zAxis[0] , 0 , 
+			xAxis[1] , yAxis[1] , zAxis[1] , 0 , 
+			xAxis[2] , yAxis[2] , zAxis[2] , 0 , 
+			-tx 	 ,		-ty ,	    -tz, 1
+			]
+		
+	}
+	
+
+	(function() {
+	var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                              window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+	window.requestAnimationFrame = requestAnimationFrame;
+	})();
+
+    var gl;
+    function initGL(canvas) {
+        try {
+			gl = canvas.getContext("webgl", 
+                 { antialias: false,
+                   depth: false });            
+		    gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+	
+		// render scene shader
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+		
+		
+		// ----------------
+		// post process shader
+		fragmentShader = getShader(gl, "postprocess-fs");
+        vertexShader = getShader(gl, "postprocess-vs");
+        postProcessProgram = gl.createProgram();
+        gl.attachShader(postProcessProgram, vertexShader);
+        gl.attachShader(postProcessProgram, fragmentShader);
+        gl.linkProgram(postProcessProgram);
+
+        if (!gl.getProgramParameter(postProcessProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(postProcessProgram);
+
+        postProcessProgram.vertexPositionAttribute = gl.getAttribLocation(postProcessProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(postProcessProgram.vertexPositionAttribute);
+		
+        postProcessProgram.vertexTexCoordsAttribute = gl.getAttribLocation(postProcessProgram, "aVertexTexCoords");
+        gl.enableVertexAttribArray(postProcessProgram.vertexTexCoordsAttribute);
+		// ----------------
+		
+		gl.useProgram(shaderProgram);
+
+    }
+
+
+    var matView = mat4.create();
+    var matWorld = mat4.create();
+    var matProj = mat4.create();
+
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matWorld"), false, matWorld);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matView"), false, matView);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matProj"), false, matProj);
+		
+    }
+
+
+	// render to texture
+	var rttFramebuffer;
+    var rttTexture;
+	var fullscreenQuad;
+	var fullscreenQuadTex;
+	var rt_ready = false;
+	
+    function initTextureFramebuffer() {
+        rttFramebuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+        rttFramebuffer.width = 1024;
+        rttFramebuffer.height = 1024;
+
+        rttTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+		
+		var renderbuffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, rttFramebuffer.width, rttFramebuffer.height);
+
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rttTexture, 0);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+
+		gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        
+		fullscreenQuad = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, fullscreenQuad);
+        var vertices = [
+             -1.0, -1.0,  0.5,
+            -1.0, 1.0,  0.5,
+             1.0, -1.0,  0.5,
+             1.0, 1.0,  0.5,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        fullscreenQuad.itemSize = 3;
+        fullscreenQuad.numItems = 4;
+		
+		// coordenadas de textura
+		var tx_coords = [
+		 0.0, 0.0, 
+		 0.0, 1.0,  
+		 1.0, 0.0,
+		 1.0, 1.0  
+        ];
+
+		fullscreenQuadTex = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, fullscreenQuadTex);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tx_coords), gl.STATIC_DRAW);
+		fullscreenQuadTex.itemSize = 2;
+		fullscreenQuadTex.numItems = 4;
+		
+		rt_ready = true;
+
+	}
+
+	
+
+    var vertexPositionBuffer;
+	var vertexColorBuffer;
+	
+	function rect(vertices,p0,p1,p2)
+	{
+		var p3 = [p1[0] + p2[0] - p0[0] , p1[1] + p2[1] - p0[1]  ,p1[2] + p2[2] - p0[2] ];
+		vertices.push(p0[0]);
+		vertices.push(p0[1]);
+		vertices.push(p0[2]);
+		
+		vertices.push(p1[0]);
+		vertices.push(p1[1]);
+		vertices.push(p1[2]);
+		
+		vertices.push(p2[0]);
+		vertices.push(p2[1]);
+		vertices.push(p2[2]);
+
+		vertices.push(p1[0]);
+		vertices.push(p1[1]);
+		vertices.push(p1[2]);
+		
+		vertices.push(p2[0]);
+		vertices.push(p2[1]);
+		vertices.push(p2[2]);
+		
+		vertices.push(p3[0]);
+		vertices.push(p3[1]);
+		vertices.push(p3[2]);
+		
+	}
+	
+	function f_shadow(vertices , p0)
+	{
+		//var p0 = [-50,150,-50];
+		var u = [1,0,0];
+		var v = [0,0,1];
+		var N = vec3.create();
+		var vL = [0, dist_luz, 0];
+		var dp = 1.0;
+		for(var i=0;i<40;++i)
+		for(var j=0;j<40;++j)
+		{
+			var A = [] , B= [] , C=[] ;
+			A[0] = p0[0] + (i*dp)*v[0] + (j*dp)*u[0];
+			A[1] = p0[1] + (i*dp)*v[1] + (j*dp)*u[1];
+			A[2] = p0[2] + (i*dp)*v[2] + (j*dp)*u[2];
+			
+			B[0] = p0[0] + ((i+1)*dp)*v[0] + (j*dp)*u[0];
+			B[1] = p0[1] + ((i+1)*dp)*v[1] + (j*dp)*u[1];
+			B[2] = p0[2] + ((i+1)*dp)*v[2] + (j*dp)*u[2];
+			
+			C[0] = p0[0] + (i*dp)*v[0] + ((j+1)*dp)*u[0];
+			C[1] = p0[1] + (i*dp)*v[1] + ((j+1)*dp)*u[1];
+			C[2] = p0[2] + (i*dp)*v[2] + ((j+1)*dp)*u[2];
+			
+			var r = -400-Math.random() * 1200;
+			vec3.subtract(A, vL,N)
+			vec3.normalize(N);
+			vec3.add(A,vec3.scale(N,r));
+			vec3.subtract(B, vL,N)
+			vec3.normalize(N);
+			vec3.add(B,vec3.scale(N,r));
+			vec3.subtract(C, vL,N)
+			vec3.normalize(N);
+			vec3.add(C,vec3.scale(N,r));
+			
+			
+			rect(vertices,A, B,C);
+		}
+	}
+
+    function initBuffers() {
+        vertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+		var G = [ 	" *   ***  " ,
+					"**  *   * " ,
+					" *  *    *" ,
+					" *       *" ,
+					" *      * " ,
+					" *     *  " ,
+					" *    *   " ,
+					" *   *    " ,
+					" *   *    " ,
+					"***  *****" ];
+		var vertices = [];
+		for(var i=0;i<10;++i)
+		for(var j=0;j<10;++j)
+			if(G[i].charAt(j)=='*')
+				f_shadow(vertices, [40*i,150,40*j]);
+		//f_shadow(vertices, [14,150,14]);
+			
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        vertexPositionBuffer.itemSize = 3;
+        vertexPositionBuffer.numItems = vertices.length / 3;
+    }
+
+	var vLookFrom = [320*5, 220*5, 220*5];
+	var vLookAt = [0, 0, 0];
+	var vLightPos = [0, dist_luz, 0];
+	
+	var time = 0;
+
+    function render(elapsed_time) {
+	
+		if(!rt_ready)
+			return;
+	
+		gl.useProgram(shaderProgram);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);	
+		gl.viewport(0, 0, rttFramebuffer.width, rttFramebuffer.height);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+		time += elapsed_time;
+		
+		var s = Math.floor(time*0.001) % 10;
+		// s integer = 0..9
+		var an =  -40 + 10*s;
+		var t = an / 180 * Math.PI;
+		//t = 0;
+		vLightPos = [Math.sin(t)*dist_luz, Math.abs(Math.cos(t))*dist_luz, 0];
+		
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 1.0, 5000.0, matProj);
+        mat4.identity(matWorld);
+		matView = makeLookAt(vLookFrom, vLookAt, [0,1,0]);
+        
+		gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+		
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "vLightPos"), vLightPos);
+        setMatrixUniforms();
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "shadows"), 1);
+        gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems);
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, "shadows"), 0);
+		gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems);
+		
+		//----------------------------------------------------
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.useProgram(postProcessProgram);
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, rttTexture);            
+		gl.uniform1i(postProcessProgram.samplerUniform, 0);
+        gl.uniform1f(gl.getUniformLocation(postProcessProgram, "time"), time);
+		gl.bindBuffer(gl.ARRAY_BUFFER, fullscreenQuad);
+        gl.vertexAttribPointer(postProcessProgram.vertexPositionAttribute, fullscreenQuad.itemSize, gl.FLOAT, false, 0, 0);
+		gl.bindBuffer(gl.ARRAY_BUFFER, fullscreenQuadTex);
+        gl.vertexAttribPointer(postProcessProgram.vertexTexCoordsAttribute, fullscreenQuadTex.itemSize, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, fullscreenQuad.numItems);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+		
+		
+		
+
+    }
+	
+	var lastTime = 0;
+	function RenderLoop()
+	{
+		requestAnimationFrame(RenderLoop);
+		var timeNow = new Date().getTime();
+		if (lastTime != 0) {
+			var elapsed = timeNow - lastTime;
+			render(elapsed);
+		}
+		lastTime = timeNow;
+	 }
+	
+
+
+function onMouseMove() 
+{
+	var xPos = window.event.offsetX;
+	var yPos = window.event.offsetY;
+
+	switch (eventoInterno) {
+	    case EV_3D_REALTIME:
+			var dx = xPos - mouse_x;
+			var dy = yPos - mouse_y;
+			vLookFrom[1] += dy;
+			var x = vLookFrom[0];
+			var z = vLookFrom[2];
+			var an = dx / 800 * 3.1415;
+			vLookFrom[0] = x*Math.cos(an) - z*Math.sin(an);
+			vLookFrom[2] = x*Math.sin(an) + z*Math.cos(an);
+	        break;
+
+	    case EV_PAN_REALTIME:
+			var dx = xPos - mouse_x;
+			var dy = yPos - mouse_y;
+			var xAxis = vec3.create();
+			var yAxis = vec3.create();
+			var zAxis = vec3.create();
+			vec3.subtract(vLookFrom, vLookAt,zAxis)
+			vec3.normalize(zAxis);
+			vec3.cross([0,1,0], zAxis,xAxis);
+			vec3.normalize(xAxis);
+			vec3.cross(zAxis, xAxis,yAxis);
+			var k = 0.5;
+			var desf_x = -xAxis[0]*dx*k + yAxis[0]*dy*k;
+			var desf_y = -xAxis[1]*dx*k + yAxis[1]*dy*k;
+			var desf_z = -xAxis[2]*dx*k + yAxis[2]*dy*k;
+			vLookFrom[0] += desf_x;
+			vLookFrom[1] += desf_y;
+			vLookFrom[2] += desf_z;
+			vLookAt[0] += desf_x;
+			vLookAt[1] += desf_y;
+			vLookAt[2] += desf_z;
+			
+	        break;
+			
+	}
+
+    // actualizo la posicion del mouse
+	mouse_x = xPos;
+	mouse_y = yPos;
+}
+
+function onMouseDown(e) {
+    e = e || window.event;
+    switch (e.which)
+    {
+        case 1:
+            // Left button
+            // WM_LBUTTONDOWN
+            mouse_x = window.event.offsetX;
+            mouse_y = window.event.offsetY;
+			eventoInterno = EV_3D_REALTIME;
+            break;
+        case 2:
+            mouse_x = window.event.offsetX;
+            mouse_y = window.event.offsetY;
+			eventoInterno = EV_PAN_REALTIME;
+            break;
+        case 3:
+            // right button
+            break;
+    }
+}
+
+
+function onMouseUp(e) {
+    e = e || window.event;
+    switch (e.which) {
+        case 1:
+            // Left button
+            // WM_LBUTTONUP
+            eventoInterno = EV_NADA;
+            break;
+        case 2:
+            // middle button
+            // WM_MBUTTONUP
+            // termino event de pan realtime
+            eventoInterno = EV_NADA;
+            break;
+        case 3:
+            // right button
+            break;
+    }
+}
+
+
+function onMouseWheel(e) {
+
+    var delta = e.wheelDelta;
+    // ajusto la escala
+	var viewdir = vec3.create();
+	vec3.subtract(vLookFrom,vLookAt,viewdir)
+	var dist = vec3.length(viewdir);
+	vec3.normalize(viewdir)
+	if(delta>0)
+		dist *= 0.9;
+	else
+		dist *= 1.1;
+	vLookFrom[0] = vLookAt[0] + viewdir[0]*dist; 
+	vLookFrom[1] = vLookAt[1] + viewdir[1]*dist; 
+	vLookFrom[2] = vLookAt[2] + viewdir[2]*dist; 
+}
+
+	
+	function doKeyDown(e) 
+	{
+		if(e.keyCode==33)
+		{
+			if(myMesh.currentAnimation<myMesh.animacion.length-1)
+				myMesh.initAnimation(myMesh.currentAnimation+1,true,30);
+		}
+		if(e.keyCode==34)
+		{
+			if(myMesh.currentAnimation>0)
+				myMesh.initAnimation(myMesh.currentAnimation-1,true,30);
+		}
+	}
+
+
+    function webGLStart() {
+		
+		document.addEventListener("mousemove", onMouseMove, true);
+		document.addEventListener("mousedown", onMouseDown, true);
+		document.addEventListener("mouseup", onMouseUp, true);
+		document.addEventListener("mousewheel", onMouseWheel, true);
+		document.addEventListener( "keydown", doKeyDown, true);
+
+        var canvas = document.getElementById("canvas");
+        initGL(canvas);
+        initBuffers();
+        initShaders();
+		initTextureFramebuffer();
+
+		gl.clearColor(0.5, 0.5, 0.5, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);		
+		gl.enable(gl.BLEND);
+        RenderLoop();
+    }
+	
+	
+</script>
+
+</head>
+
+
+<body onload="webGLStart();">
+    <canvas id="canvas" style="border: none;" width="1200" height="600"></canvas>
+</body>
+</html>

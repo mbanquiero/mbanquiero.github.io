@@ -1,0 +1,524 @@
+
+
+
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Galaxia </title>
+
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+	varying vec4 vColor;
+	varying vec3 vNormal;
+	varying vec3 vPos;
+    uniform vec3 vEye;
+    void main(void) {
+	
+        gl_FragColor.rgba = vec4(1.0);
+    }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+	
+    uniform mat4 matWorld;
+    uniform mat4 matView;
+    uniform mat4 matProj;
+	uniform float time;
+    void main(void) {
+		
+		gl_PointSize = 0.1;
+        gl_Position = matProj * matView * vec4(aVertexPosition , 1.0);
+    }
+</script>
+
+
+<script type="text/javascript">
+
+
+	(function() {
+	var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                              window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+	window.requestAnimationFrame = requestAnimationFrame;
+	})();
+	
+
+	// Eventos
+	var EV_NADA				= 0;
+	var EV_PAN_REALTIME		= 1;
+	var EV_3D_REALTIME		= 2;
+	var eventoInterno = EV_NADA;
+	var mouse_x = 0;
+	var mouse_y = 0;
+
+	function makeBasis(Tg , Bt, N) {
+		vec3.normalize(Tg);
+		vec3.cross([0,1,0], Tg,Bt);
+		vec3.normalize(Bt);
+		vec3.cross(Tg, Bt,N);
+		vec3.normalize(N);
+	}
+	
+	
+	function makeLookAt(cameraPosition, target, up, matView) {
+	var xAxis = vec3.create();
+	var yAxis = vec3.create();
+	var zAxis = vec3.create();
+	
+	vec3.subtract(cameraPosition, target,zAxis)
+	vec3.normalize(zAxis);
+	vec3.cross(up, zAxis,xAxis);
+	vec3.normalize(xAxis);
+	vec3.cross(zAxis, xAxis,yAxis);
+
+	var tx = vec3.dot(xAxis,cameraPosition);
+	var ty = vec3.dot(yAxis,cameraPosition);
+	var tz = vec3.dot(zAxis,cameraPosition);
+
+	return [
+			xAxis[0] , yAxis[0] , zAxis[0] , 0 , 
+			xAxis[1] , yAxis[1] , zAxis[1] , 0 , 
+			xAxis[2] , yAxis[2] , zAxis[2] , 0 , 
+			-tx 	 ,		-ty ,	    -tz, 1
+			]
+		
+	}
+	
+    var gl;
+    function initGL(canvas) {
+        try {
+			gl = canvas.getContext("webgl", 
+                 { antialias: false,
+                   depth: true });            
+		    gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+    }
+
+
+    var matView = mat4.create();
+    var matWorld = mat4.create();
+    var matProj = mat4.create();
+
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matWorld"), false, matWorld);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matView"), false, matView);
+        gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "matProj"), false, matProj);
+    }
+
+
+	var vertexPositionBuffer;
+
+function constrain(v, min, max){
+  if( v < min )
+    v = min;
+  else
+  if( v > max )
+    v = max;
+  return v;
+}
+
+function random(low, high) {
+  if (low >= high) return low;
+  var diff = high - low;
+  return (Math.random() * diff) + low;
+}	
+    var vertices = [];
+	var cant_v = 0;
+	var min_x = 100000;
+	var min_y = 100000;
+	var min_z = 100000;
+	var max_x = -100000;
+	var max_y = -100000;
+	var max_z = -100000;
+	
+    function initBuffers() {
+	
+		var t = 0;
+		
+		var count = 100000;
+		var numArms = 5;
+		var arm = 0;
+		var countPerArm = count / numArms;
+		var ang = 0;
+		var dist = 0;
+		for( var i=0; i<count; i++ )
+		{
+			var x = Math.cos(ang) * dist;
+			var y = 0;
+			var z = Math.sin(ang) * dist;
+
+			//	scatter
+			var sa = 100 - Math.sqrt(dist);				//	scatter amt
+			if( Math.random() > 0.3)
+				sa *= ( 1 + Math.random() ) * 4;
+			x += random(-sa, sa);
+			z += random(-sa, sa);
+
+			var distanceToCenter = Math.sqrt( x*x + z*z);
+			var thickness = constrain( Math.pow( constrain(90-distanceToCenter*0.1,0,100000),2) * 0.02,2,10000) + Math.random() * 120;
+			y += random( -thickness, thickness);		
+
+			x *= 20;
+			y *= 20;
+			z *= 20;
+
+			/*
+			var size = 200 + constrain( 600/dist,0,32000);	
+			if( Math.random() > 0.99 )
+				size *= Math.pow(1 + Math.random(), 3 + Math.random() * 3) * .9;	
+			else
+				if( Math.random() > 0.7 )
+					size *= 1 + Math.pow(1 + Math.random(), 2) * .04;
+
+			if( i == 0 ){
+				p.size = 100000;
+				// p.x = -100 * 20;
+				// p.y = 0;
+				// p.z = -1500 * 20;;
+			}
+			*/
+
+			
+			vertices[t++] = x;
+			vertices[t++] = y;
+			vertices[t++] = z;
+			cant_v++;
+			
+			ang += 0.0002;	
+			dist += .08;
+
+			if( i % countPerArm == 0 )
+			{
+				ang = Math.PI * 2 / numArms * arm;
+				dist = 0;
+				arm++;
+			}
+			
+			
+			if(x<min_x)
+				min_x = x;
+			if(y<min_y)
+				min_y = y;
+			if(z<min_z)
+				min_z = z;
+			if(x>max_x)
+				max_x = x;
+			if(y>max_y)
+				max_y = y;
+			if(z>max_z)
+				max_z = z;
+				
+		}		
+		
+		
+		
+		var d = calcBoxDim(15000);
+		
+
+        vertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        vertexPositionBuffer.itemSize = 3;
+        vertexPositionBuffer.numItems = cant_v;
+
+    }
+
+	// computo la dimension BOX
+	function calcBoxDim(n)
+	{
+		var dx = max_x - min_x;
+		var dz = max_z - min_z;
+		
+		var V = [];
+		for(var i=0;i<=n;++i)
+		{
+			V[i] = [];
+			for(var j=0;j<=n;++j)
+			{	
+				V[i][j] = 0;
+			}
+		}
+			
+		for(var s=0;s<cant_v;++s)
+		{
+			var x = (vertices[3*s] - min_x) / dx;
+			var z = (vertices[3*s+2] - min_z) / dz;
+			var i = Math.floor(x*n);
+			var j = Math.floor(z*n);
+			V[i][j] = 1;
+		}
+			
+		var tot = 0;
+		for(var i=0;i<n;++i)
+		{
+			for(var j=0;j<n;++j)
+			{	
+				tot += V[i][j];
+			}
+		}
+		
+				
+		return Math.log(tot) / Math.log(n);
+		
+	}
+	var angle = 0;
+	var time = 0;
+	var vLookFrom = [10000, 10000, 10000];
+	var vLookAt = [0, 0, 0];
+	var vel = [-1000,-1000,-1000];
+	var Normal = [0,0,0];
+	var BiTangente = [0,0,0];
+
+    function render(elapsed_time) {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 100.0, 300000.0, matProj);
+        mat4.identity(matWorld);
+		
+		angle += elapsed_time*0.001;
+		time += elapsed_time;
+		
+        gl.uniform3fv(gl.getUniformLocation(shaderProgram, "vEye"), vLookFrom);
+        gl.uniform1f(gl.getUniformLocation(shaderProgram, "time"), time);
+		
+		vLookAt[0] = vLookFrom[0] + vel[0]*10000;
+		vLookAt[1] = vLookFrom[1] + vel[1]*10000;
+		vLookAt[2] = vLookFrom[2] + vel[2]*10000;
+		
+		
+        matView = makeLookAt(vLookFrom, vLookAt, BiTangente);
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        setMatrixUniforms();
+        gl.drawArrays(gl.POINTS, 0, vertexPositionBuffer.numItems);
+
+    }
+
+
+	var lastTime = 0;
+	function RenderLoop()
+	{
+		requestAnimationFrame(RenderLoop);
+		var timeNow = new Date().getTime();
+		if (lastTime != 0) {
+			var elapsed = timeNow - lastTime;
+			render(elapsed);
+		}
+		lastTime = timeNow;
+	 }
+	
+// ---------------------- EVENTOS DEL MOUSE ----------------------
+function onMouseMove() 
+{
+	var xPos = window.event.offsetX;
+	var yPos = window.event.offsetY;
+
+	switch (eventoInterno) {
+	    case EV_3D_REALTIME:
+			var dx = xPos - mouse_x;
+			var dy = yPos - mouse_y;
+			var an_x = -dx / 800 * 3.1415;
+			var an_y = dy / 800 * 3.1415;
+			var MRot = mat4.create();
+			mat4.identity(MRot);
+			mat4.rotate(MRot,an_y, Normal, MRot);
+			mat4.multiplyVec3(MRot,vel,vel);
+			mat4.multiplyVec3(MRot,BiTangente,BiTangente);
+			
+			mat4.identity(MRot);
+			mat4.rotate(MRot,an_x, BiTangente, MRot);
+			mat4.multiplyVec3(MRot,vel,vel);
+			mat4.multiplyVec3(MRot,Normal,Normal);
+			
+	        break;
+
+	    case EV_PAN_REALTIME:
+			var dx = xPos - mouse_x;
+			var dy = yPos - mouse_y;
+			var xAxis = vec3.create();
+			var yAxis = vec3.create();
+			var zAxis = vec3.create();
+			vec3.subtract(vLookFrom, vLookAt,zAxis)
+			vec3.normalize(zAxis);
+			vec3.cross([0,1,0], zAxis,xAxis);
+			vec3.normalize(xAxis);
+			vec3.cross(zAxis, xAxis,yAxis);
+			var k = 10;
+			var desf_x = -xAxis[0]*dx*k + yAxis[0]*dy*k;
+			var desf_y = -xAxis[1]*dx*k + yAxis[1]*dy*k;
+			var desf_z = -xAxis[2]*dx*k + yAxis[2]*dy*k;
+			vLookFrom[0] += desf_x;
+			vLookFrom[1] += desf_y;
+			vLookFrom[2] += desf_z;
+			vLookAt[0] += desf_x;
+			vLookAt[1] += desf_y;
+			vLookAt[2] += desf_z;
+			
+	        break;
+			
+	}
+
+    // actualizo la posicion del mouse
+	mouse_x = xPos;
+	mouse_y = yPos;
+}
+
+function onMouseDown(e) {
+    e = e || window.event;
+    switch (e.which)
+    {
+        case 1:
+            // Left button
+            // WM_LBUTTONDOWN
+            mouse_x = window.event.offsetX;
+            mouse_y = window.event.offsetY;
+			eventoInterno = EV_3D_REALTIME;
+            break;
+        case 2:
+            mouse_x = window.event.offsetX;
+            mouse_y = window.event.offsetY;
+			eventoInterno = EV_PAN_REALTIME;
+            break;
+        case 3:
+            // right button
+            break;
+    }
+}
+
+
+function onMouseUp(e) {
+    e = e || window.event;
+    switch (e.which) {
+        case 1:
+            // Left button
+            // WM_LBUTTONUP
+            eventoInterno = EV_NADA;
+            break;
+        case 2:
+            // middle button
+            // WM_MBUTTONUP
+            // termino event de pan realtime
+            eventoInterno = EV_NADA;
+            break;
+        case 3:
+            // right button
+            break;
+    }
+}
+
+
+function onMouseWheel(e) {
+
+    var delta = e.wheelDelta;
+    // ajusto la escala
+	var viewdir = vec3.create();
+	vec3.subtract(vLookFrom,vLookAt,viewdir)
+	var dist = vec3.length(viewdir);
+	vec3.normalize(viewdir)
+	if(delta>0)
+		dist *= 0.9;
+	else
+		dist *= 1.1;
+	vLookFrom[0] = vLookAt[0] + viewdir[0]*dist; 
+	vLookFrom[1] = vLookAt[1] + viewdir[1]*dist; 
+	vLookFrom[2] = vLookAt[2] + viewdir[2]*dist; 
+}
+
+
+    function webGLStart() {
+		document.addEventListener("mousemove", onMouseMove, true);
+		document.addEventListener("mousedown", onMouseDown, true);
+		document.addEventListener("mouseup", onMouseUp, true);
+		document.addEventListener("mousewheel", onMouseWheel, true);
+		makeBasis(vel , Normal , BiTangente);
+        var canvas = document.getElementById("canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+		gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+        RenderLoop();
+    }
+</script>
+
+</head>
+
+
+<body onload="webGLStart();">
+    <canvas id="canvas" style="border: none;" width="1000" height="700"></canvas>
+</body>
+</html>
+
+
+	
+
+
+		

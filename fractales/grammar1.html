@@ -1,0 +1,102 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript">
+
+var elapsed_time = 1/60;
+var canvas;
+var ctx;
+
+var axioma = "A";
+var reglas = [
+	"A->ABA",
+	"B->BBB" 
+];
+
+var string = axioma;
+
+function que_regla(A)
+{
+	// devuelve que regla es la que se aplica a A
+	var rta = -1;
+	for(var i=0;i<reglas.length && rta==-1;++i)
+		if(reglas[i].charAt(0)==A)
+			rta = i;
+			
+	return rta;
+}
+
+function iterar()
+{
+	// tomo el string y aplico las reglas
+	var l = string.length;
+	var string_out = "";
+	for(var i=0;i<l;++i)
+	{
+		var A = string.charAt(i);
+		// busco el A en las reglas
+		var j = que_regla(A);
+		if(j!=-1)
+		{
+			// aplico la regla j al caracter A
+			string_out += reglas[j].substr(3);
+		}
+		else
+		{
+			// simobolo estatico
+			string_out += A;
+		}
+	}
+	string = string_out;
+}
+
+function draw() 
+{
+	// borro la pantalla
+	ctx.fillStyle = 'rgba(255,255,255,255)';
+	ctx.fillRect(0,0,1200,1200);
+	var dx = 400;
+	var dy = 50;
+	for(var j=0;j<10;++j)
+	{
+		// itero
+		iterar();
+		
+		// tomo el string y lo dibujo
+		var l = string.length;
+		for(var i=0;i<l;++i)
+		{
+			switch(string.charAt(i))
+			{
+				case 'A':
+					// linea negra
+					ctx.fillStyle = 'rgba(0,0,0,255)';
+					ctx.fillRect(i*dx,j*dy,dx,dy);
+					break;
+				case 'B':
+					// linea blanca (no hace nada)
+					break;
+			}
+		}
+		dx /= 3;
+		
+	}
+
+}
+
+  
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	ctx = canvas.getContext('2d');
+	draw();
+} 
+
+</script>
+
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1200" height="600" style="float:left"></canvas>
+</body>
+</html>
+ 

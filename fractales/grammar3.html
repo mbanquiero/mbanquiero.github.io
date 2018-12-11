@@ -1,0 +1,155 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript">
+
+var elapsed_time = 1/60;
+var canvas;
+var ctx;
+
+// reglas (del logo de la talent msx de 1980)
+// M : mover (hacia adelante)
+// + : rotar positivo n grados (el n es el valor fijo que tiene angulo)
+// - : rotar negativo n grados
+// [ : push en el stack de estado graficos (es decir guarda la posicion x,y)
+// ] : pop (recupera la posicion
+// C : color N
+
+var ds = 2;
+var cant_iteracciones = 6;
+var angulo = 32;
+var axioma = "F";
+var reglas = [
+	"F->FF-C1[-F+F]+C0[+F-F]"
+
+];
+
+
+var colores = [ 'rgba(0,0,0,255)' , 'rgba(0,255,0,255)' , 'rgba(255,255,0,255)' ];
+var string = axioma;
+
+function que_regla(A)
+{
+	// devuelve que regla es la que se aplica a A
+	var rta = -1;
+	for(var i=0;i<reglas.length && rta==-1;++i)
+		if(reglas[i].charAt(0)==A)
+			rta = i;
+			
+	return rta;
+}
+
+function iterar()
+{
+	// tomo el string y aplico las reglas
+	var l = string.length;
+	var string_out = "";
+	for(var i=0;i<l;++i)
+	{
+		var A = string.charAt(i);
+		// busco el A en las reglas
+		var j = que_regla(A);
+		if(j!=-1)
+		{
+			// aplico la regla j al caracter A
+			string_out += reglas[j].substr(3);
+		}
+		else
+		{
+			// simobolo estatico
+			string_out += A;
+		}
+	}
+	string = string_out;
+}
+
+function draw() 
+{
+	// itero
+	for(var i = 0;i<cant_iteracciones;++i)
+	{
+		iterar();
+	}
+
+
+	// borro la pantalla
+	ctx.fillStyle = 'rgba(255,255,255,255)';
+	ctx.fillRect(0,0,1200,1200);
+	ctx.fillStyle = 'rgba(0,0,0,255)';
+	ctx.strokeStyle = 'rgba(0,0,0,255)';
+	
+	var an = 0;
+	var x = 200;
+	var y = 200;
+	var clr = 0;
+	var stack = [];
+	
+	
+	ctx.beginPath();
+	ctx.moveTo(x,y);
+		
+	// tomo el string y lo dibujo
+	var l = string.length;
+	for(var i=0;i<l;++i)
+	{
+		switch(string.charAt(i))
+		{
+			case 'M':
+			case 'F':
+				// move 
+				x += ds* Math.cos(an*Math.PI / 180);
+				y += ds* Math.sin(an*Math.PI / 180);
+				ctx.lineTo(x,y);
+				ctx.stroke();
+				ctx.beginPath();
+				ctx.moveTo(x,y);
+				break;
+			case '-':
+				an += Math.random()*angulo;
+				break;
+			case '+':
+				an -= Math.random()*angulo;
+				break;
+			case '[':
+				// push
+				stack.push([x,y,an]);
+				break;
+				
+			case ']':
+				// pop
+				var pos = stack.pop();
+				x = pos[0];
+				y = pos[1];
+				an = pos[2];
+				ctx.moveTo(x,y);
+				break;
+				
+			case 'C':
+				// color N 
+				clr = parseInt(string.charAt(++i));
+				ctx.strokeStyle = colores[clr];
+				break;
+			
+				
+		}
+	}
+	ctx.stroke();
+
+}
+
+  
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	ctx = canvas.getContext('2d');
+	draw();
+} 
+
+</script>
+
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1200" height="600" style="float:left"></canvas>
+</body>
+</html>
+ 

@@ -2,32 +2,22 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Técnicas de Gráficos x Computadora - Sponge</title>
+<title>Fractal Ride</title>
+
+
 <style>
-* {
-    box-sizing: border-box;
+.container {
+    position: relative;
 }
-
-
-.column {
-    float: left;
-    padding: 10px;
-}
-
-.left {
-  width: 75%;
-}
-
-.right {
-  width: 25%;
-}
-
-.row:after {
-    content: "";
-    display: table;
-    clear: both;
+ 
+#text {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    z-index: 10;
 }
 </style>
+
 
 <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
 
@@ -40,75 +30,94 @@
     uniform vec3 vViewDir;
     uniform vec3 Dx;
     uniform vec3 Dy;
+	uniform int colision;
+    uniform vec3 vEnemigo[8];
 	
-	float hash( float n )
-	{
-		return fract(sin(n)*43758.5453);
-	}
+	vec3 obj_color;
+	vec3 mandelbox_color;
 
-	float noise( vec3 x )
+	void sphereFold(inout vec3 z, inout float dz) 
 	{
-		vec3 p = floor(x);
-		vec3 f = fract(x);
-		f       = f*f*(3.0-2.0*f);
-		float n = p.x + p.y*57.0 + 113.0*p.z;
-		return mix(mix(mix( hash(n+0.0), hash(n+1.0),f.x),
-					   mix( hash(n+57.0), hash(n+58.0),f.x),f.y),
-				   mix(mix( hash(n+113.0), hash(n+114.0),f.x),
-					   mix( hash(n+170.0), hash(n+171.0),f.x),f.y),f.z);
-	}
-	
-	
-	// signed distance - Box 
-	float sdBox( vec3 p, vec3 b )
-	{
-		vec3 d = abs(p) - b;
-		return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
-	}
-
-	// signed distance - Cross 
-	float sdCross( in vec3 p )
-	{
-		float inf = 1000.0;		// infinito :)
-		float da = sdBox(p.xyz,vec3(inf,1.0,1.0));
-		float db = sdBox(p.yzx,vec3(1.0,inf,1.0));
-		float dc = sdBox(p.zxy,vec3(1.0,1.0,inf));
-		return min(da,min(db,dc));
-	}
-	
-	float sponge(vec3 p) 
-	{
-		p*=0.5;
-		p += noise(p);
-		p = mod(p , 3.0) - 1.5;
-		float d = sdBox(p,vec3(1.0));
-
-	   float s = 1.0;
-	   for( int m=0; m<10; m++ )
-	   {
-		  vec3 a = mod( p*s, 2.0 )-1.0;
-		  s *= 3.0;
-		  vec3 r =  3.0*abs(a) - 1.0;
-		  float c = sdCross(r)/s;		  
-		  d = max(d,c);	
+		const float fixedRadius2 = 1.0;
+		const float minRadius2 = 0.5;
+		float r2 = dot(z,z);
+		if (r2 < minRadius2) { 
+			// linear inner scaling
+			float temp = (fixedRadius2/minRadius2);
+			z *= temp;
+			dz*= temp;
+			mandelbox_color.b = 1.0;
+		} else if (r2 < fixedRadius2) { 
+			// this is the actual sphere inversion
+			float temp =(fixedRadius2/r2);
+			z *= temp;
+			dz*= temp;
+			mandelbox_color.g = 1.0;
 		}
+	}
+
+	void boxFold(inout vec3 z, inout float dz) {
 		
-		return d;
+		z = clamp(z, -1.0, 1.0) * 2.0 - z;
 	}
 
+
+	float sdSphere( vec3 p, float s )
+	{
+		return length(p)-s;
+	}	
+	
 	// Algoritmo de Ray marching Estandar
-
-	float map(vec3 p) {
-		return sponge(p);
+	
+	float map(vec3 z)
+	{
+		float dist = 10000.0;
+		for(int i=0;i<8;++i)
+		{
+			float d = sdSphere(z-vEnemigo[i],0.05);
+			if(d < dist)
+			{
+				dist = d;
+				obj_color = vec3(1.0 , 0.8 , 0.2);	
+			}
+		}
+		if(dist<0.01)
+		{
+			return dist;
+		}
+			
+		const float Scale = 2.5;
+		vec3 offset = z;
+		float dr = 1.0;
+		mandelbox_color = vec3(0.85);
+		for (int n = 0; n < 24; n++) 
+		{
+			boxFold(z,dr);       // Reflect
+			sphereFold(z,dr);    // Sphere Inversion
+            z=Scale*z + offset;  // Scale & Translate
+            dr = dr*abs(Scale)+1.0;
+		
+			float d = length(z) / abs(dr);
+			if(d < dist)
+			{
+				dist = d;
+				obj_color = mandelbox_color;	
+			}
+				
+			if(dist<0.001)
+				return dist;
+		}
+		return dist;
 	}
-
-
+	
 	vec3 calcNormal(vec3 p) 
 	{
-		vec2 e = vec2(0.01, 0.0);
-		return normalize(vec3( 	map(p + e.xyy) - map(p - e.xyy),
-                            map(p + e.yxy) - map(p - e.yxy),
-                          	map(p + e.yyx) - map(p - e.yyx)));
+		
+    vec2 e = vec2(1.0,-1.0)*0.001;
+    return normalize( e.xyy*map( p + e.xyy ) + 
+					  e.yyx*map( p + e.yyx ) + 
+					  e.yxy*map( p + e.yxy ) + 
+					  e.xxx*map( p + e.xxx ) );							
 	}
 	
 	
@@ -130,17 +139,17 @@
 	
     void main(void) {
 
+		const vec3 light = vec3(1.0 , 1.0 , 1.0);
 		float x = 2.0 * vTextureCoord.x - 1.0;
 		float y = 1.0 - 2.0 * vTextureCoord.y;
-		vec3 rd = normalize(vViewDir - Dy*y + Dx*x);	
-		vec3 ro = -vViewDir * (4.5 - time*0.0005);
-		//vec3 ro = vEye;
+		vec3 rd = normalize(vViewDir - Dy*y + Dx*x*1.3);	
+		vec3 ro = vEye;
 		
 		vec3 col = vec3(0.0);
-		float tmax = 20.0;
-		float h = 1.5;
+		float tmax = 10.0;
+		float h = 0.5;
 		float t = 0.0;
-		for(int i = 0; i < 64; i++) {
+		for(int i = 0; i < 128; i++) {
 			if (h < 0.001 || h > tmax) break;
 			h = map( ro + rd * t);
 			t += h;
@@ -148,12 +157,19 @@
     		
 		if (t < tmax) 
 		{
-			vec3 L = normalize(vec3(1.0 , 1.0 , 1.0));
+			vec3 color_base = obj_color;
+			vec3 L = normalize(light);
 			vec3  P = ro + t*rd;
 			vec3  N = calcNormal(P);
 			float s = shadow( P, L);		
-			col = fract(P) * dot(N ,L) * s + vec3(0.1, 0.1, 0.1);
-		}		
+			
+			col =   color_base * abs(dot(N ,L)) * s + vec3(0.3);
+		}
+
+
+		// colision! : alerta de proximidad
+		if(colision == 1)
+			col.r = 1.0;
 		
 		gl_FragColor = vec4(col, 1.0);		
 
@@ -179,6 +195,63 @@
 <script type="text/javascript">
 
 
+	function sphereFold(z, dz) 
+	{
+		var fixedRadius2 = 1.0;
+		var minRadius2 = 0.5;
+		var r2 = z[0]*z[0] + z[1]*z[1] + z[2]*z[2];
+		if (r2 < minRadius2) { 
+			// linear inner scaling
+			var temp = fixedRadius2/minRadius2;
+			z[0] *= temp;
+			z[1] *= temp;
+			z[2] *= temp;
+			dz*= temp;
+		} else if (r2 < fixedRadius2) { 
+			// this is the actual sphere inversion
+			var temp = fixedRadius2/r2;
+			z[0] *= temp;
+			z[1] *= temp;
+			z[2] *= temp;
+			dz*= temp;
+		}
+		
+		return dz;
+	}
+
+	function clamp(a,b,c) {
+		return Math.max(b,Math.min(c,a)) };
+	
+	function boxFold(z) {
+		z[0] = clamp(z[0], -1.0, 1.0) * 2.0 - z[0];
+		z[1] = clamp(z[1], -1.0, 1.0) * 2.0 - z[1];
+		z[2] = clamp(z[2], -1.0, 1.0) * 2.0 - z[2];
+	}
+
+
+	function js_map(z)
+	{
+		var Scale = 2.5;
+		var offset = [z[0] , z[1] , z[2]];
+		var dr = 1.0;
+		var dist = 0;
+		for (var n = 0; n < 32; n++) 
+		{
+			boxFold(z);       // Reflect
+			dr = sphereFold(z,dr);    // Sphere Inversion
+            z[0]=Scale*z[0] + offset[0];  // Scale & Translate
+            z[1]=Scale*z[1] + offset[1];  // Scale & Translate
+            z[2]=Scale*z[2] + offset[2];  // Scale & Translate
+            dr = dr*Math.abs(Scale)+1.0;
+			dist = Math.sqrt(z[0]*z[0] + z[1]*z[1] + z[2]*z[2]) / Math.abs(dr);
+			if (dist < 0.0001)
+				return dist;
+		}
+		return dist;
+	}
+
+
+
 	// chrome render loop hack
 	(function() {
 	var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
@@ -194,6 +267,16 @@
 	var eventoInterno = EV_NADA;
 	var mouse_x = 0;
 	var mouse_y = 0;
+	
+	function makeBasis(Tg , Bt, N) {
+		vec3.normalize(Tg);
+		vec3.cross([0,1,0], Tg,Bt);
+		vec3.normalize(Bt);
+		vec3.cross(Tg, Bt,N);
+		vec3.normalize(N);
+	}
+	
+	
 
 	function makeLookAt(cameraPosition, target, up, matView) {
 	var xAxis = vec3.create();
@@ -336,36 +419,111 @@
 	
 	// render loop
 	var time = 0;
-	var vLookFrom = [320, 220, 220];
+	var vLookFrom = [-1.9, 1.8, -1.5];
 	var vLookAt = [0, 0, 0];
-    function render(elapsed_time) {
+	var vel = [1,-1,1];
+	var Normal = [0,0,0];
+	var BiTangente = [0,0,0];
+	var speed = 0.00005;
+	var vEnemigo = [];
+	var velEnemigo = [];
+	var status = 0;
+	var colision = false;
+	var cant_capturadas = 0;
+	var s_msg = "";
+	var timer_msg = 0;
+	
+	function update(elapsed_time) {
+	
+		if(status!=1)
+			return;
 			
-				var x = vLookFrom[0];
-		var z = vLookFrom[2];
-		var an = elapsed_time * 0.0001;
-		vLookFrom[0] = x*Math.cos(an) - z*Math.sin(an);
-		vLookFrom[2] = x*Math.sin(an) + z*Math.cos(an);
-
+		// timers
+		if(timer_msg>0)
+		{
+			timer_msg -= elapsed_time;
+			if(timer_msg<=0)
+				timer_msg = 0;
+		}
+			
+			
+		
+		// game loop
+		vLookFrom[0] += vel[0]*elapsed_time*speed;
+		vLookFrom[1] += vel[1]*elapsed_time*speed;
+		vLookFrom[2] += vel[2]*elapsed_time*speed;
+		
+		for(var n=0;n<8;++n)
+		{
+			var acelEnemigo = [0,0,0];
+			vec3.subtract(vEnemigo[n] , vLookFrom , acelEnemigo);
+			var dist_enemigo = acelEnemigo[0]*acelEnemigo[0] + acelEnemigo[1]*acelEnemigo[1] + acelEnemigo[2]*acelEnemigo[2];
+			if(dist_enemigo < 0.01)
+			{
+				// atrapo la esfera 
+				cant_capturadas++;
+				// ubico una nueva
+				vEnemigo[n] = [Math.random()*8-4, Math.random()*8-4, Math.random()*8-4];
+				s_msg = "Bien, una mas capturada!";
+				timer_msg = 1000;
+			}
+			else
+			if(dist_enemigo < 2)
+			{
+				vec3.normalize(acelEnemigo)
+				var kacc = 1.0;
+				velEnemigo[n][0] += acelEnemigo[0]*elapsed_time*kacc;
+				velEnemigo[n][1] += acelEnemigo[1]*elapsed_time*kacc;
+				velEnemigo[n][2] += acelEnemigo[2]*elapsed_time*kacc;
+				vec3.normalize(velEnemigo[n])
+			
+				vEnemigo[n][0] += velEnemigo[n][0]*elapsed_time*speed*0.7;
+				vEnemigo[n][1] += velEnemigo[n][1]*elapsed_time*speed*0.7;
+				vEnemigo[n][2] += velEnemigo[n][2]*elapsed_time*speed*0.7;
+			}
+		}
+		
+		// chequeo de colision contra el fractal
+		colision = false;
+		var z = [vLookFrom[0] , vLookFrom[1] , vLookFrom[2]];
+		var dist = js_map(z);
+		if(dist<0.001)
+		{
+			// se estrolo: game overflow
+			//status = 2;
+		}
+		else
+		if(dist<0.005)
+		{
+			// alerta de proximidad
+			colision = true;
+		}
+		
+		vLookAt[0] = vLookFrom[0] + vel[0];
+		vLookAt[1] = vLookFrom[1] + vel[1];
+		vLookAt[2] = vLookFrom[2] + vel[2];
 		time += elapsed_time;
+	
+	}
+
+    function render(elapsed_time) {
+		
+		ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);	
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 		gl.useProgram(postProcessProgram);
         gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+        //gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 		gl.uniform1i(postProcessProgram.samplerUniform, 0);
         gl.uniform1f(gl.getUniformLocation(postProcessProgram, "time"), time);
         gl.uniform3fv(gl.getUniformLocation(postProcessProgram, "vEye"), vLookFrom);
-		
-		var vViewDir = vec3.create();
-		vec3.subtract(vLookAt,vLookFrom,vViewDir)
-		vec3.normalize(vViewDir)
-		
-		var V = vec3.create();
-        vec3.cross(vViewDir, [0,1,0] , V);
-		vec3.normalize(V)
-		
-		var U = vec3.create();
-        vec3.cross(V, vViewDir , U);
-		vec3.normalize(U);
+        gl.uniform1i(gl.getUniformLocation(postProcessProgram, "colision"), colision);
+
+		for(var n=0;n<8;++n)
+			gl.uniform3fv(gl.getUniformLocation(postProcessProgram, "vEnemigo["+n.toFixed(0)+"]"), vEnemigo[n]);
+
+		var vViewDir = vel;
+		var V = Normal;
+		var U = BiTangente;
 
         var fov = Math.PI/4.0;
         var k = 2 * Math.tan(fov / 2);
@@ -385,9 +543,93 @@
 		
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, fullscreenQuad.numItems);
         gl.bindTexture(gl.TEXTURE_2D, null);
-		
+
+		switch(status | 0)
+		{
+			case 0:
+				renderIntro();
+				break;
+			case 2:
+				renderGameOver();
+				break;
+			default:
+				renderHUD();
+				break;
+		}
 		
     }
+
+	function renderText(s,x,y)
+	{
+		ctx.fillText(s, x,y);
+		ctx.strokeText(s, x,y);
+	}
+
+	function renderIntro()
+	{
+		
+		ctx.fillStyle="#FFFFFF";
+		ctx.font="24px Verdana";
+		ctx.strokeStyle = "#FFFF00";		
+		renderText("Fractal RIDE ", 100, 100);
+		renderText("Tenes que capturar la esfera amarilla sin chocar contra las paredes del CUBO ", 100, 140);
+		renderText("Con el mouse se comanda la nava - La rueda cambia la velocidad", 100, 180);
+		renderText("Alerta de proximidad. Al acercarte mucho a una pared la pantalla se pone roja", 100, 220);
+		renderText("Haz click para empezar...", 100, 400);
+	}
+	
+	function renderGameOver()
+	{
+		
+		ctx.fillStyle="#FFFFFF";
+		ctx.font="40px Verdana";
+		ctx.strokeStyle = "#FFFF00";		
+		renderText("GAME OVER", 100, 180);
+	}
+	
+	function renderHUD()
+	{
+		// 
+		ctx.fillStyle="#00000050";
+		ctx.fillRect(0,0,1200,40);
+		ctx.fillStyle="#FFFFFF";
+		ctx.font="bold 12px Verdana"; 
+		//ctx.fillText("Pos = [" + vLookAt[0].toFixed(1) + "," + vLookAt[1].toFixed(1) + "," + vLookAt[2].toFixed(1) + "]", 10, 15);
+		ctx.fillText("Capturadas = " + cant_capturadas + "   Speed "  + (speed*1000000).toFixed(0), 10, 10);
+	
+		var dx = 200;
+		var dy = 200;
+		ctx.fillStyle="#a0f0a070";
+		ctx.fillRect(1200-dx,600-dy,dx,dy);
+		var x0 = 1200-dx/2;
+		var y0 = 600-dy/2;
+		
+		dx*=0.6;
+		dy*=0.6;
+		var k = dx / 10;
+		
+		ctx.fillStyle="#ffffff30";
+		ctx.fillRect(x0-dx/2,y0-dy/2,dx,dy);
+		
+		
+		// jugador
+		ctx.fillStyle="#0000ff";
+		ctx.fillRect(x0 + vLookFrom[0]*k ,y0 - vLookFrom[2]*k,12,12);
+		
+		// enemigo
+		ctx.fillStyle="#ffff00";
+		for(var n=0;n<8;++n)
+			ctx.fillRect(x0 + vEnemigo[n][0]*k ,y0 - vEnemigo[n][2]*k,5,5);
+		
+		// mensaje
+		if(timer_msg>0)
+		{
+			ctx.fillStyle="#ffff0040";
+			ctx.font="30px Verdana"; 
+			ctx.fillText(msg, 100, 200);
+		}
+		
+	}
 
 
 	var lastTime = 0;
@@ -397,6 +639,7 @@
 		var timeNow = new Date().getTime();
 		if (lastTime != 0) {
 			var elapsed = timeNow - lastTime;
+			update(elapsed);
 			render(elapsed);
 		}
 		lastTime = timeNow;
@@ -412,12 +655,19 @@ function onMouseMove()
 	    case EV_3D_REALTIME:
 			var dx = xPos - mouse_x;
 			var dy = yPos - mouse_y;
-			vLookFrom[1] += dy;
-			var x = vLookFrom[0];
-			var z = vLookFrom[2];
-			var an = dx / 800 * 3.1415;
-			vLookFrom[0] = x*Math.cos(an) - z*Math.sin(an);
-			vLookFrom[2] = x*Math.sin(an) + z*Math.cos(an);
+			var an_x = dx / 800 * 3.1415 * 2.0;
+			var an_y = dy / 800 * 3.1415 * 2.0;
+			var MRot = mat4.create();
+			mat4.identity(MRot);
+			mat4.rotate(MRot,an_y, Normal, MRot);
+			mat4.multiplyVec3(MRot,vel,vel);
+			mat4.multiplyVec3(MRot,BiTangente,BiTangente);
+			
+			mat4.identity(MRot);
+			mat4.rotate(MRot,an_x, BiTangente, MRot);
+			mat4.multiplyVec3(MRot,vel,vel);
+			mat4.multiplyVec3(MRot,Normal,Normal);
+
 	        break;
 
 	    case EV_PAN_REALTIME:
@@ -431,7 +681,7 @@ function onMouseMove()
 			vec3.cross([0,1,0], zAxis,xAxis);
 			vec3.normalize(xAxis);
 			vec3.cross(zAxis, xAxis,yAxis);
-			var k = 0.5;
+			var k = 0.05;
 			var desf_x = -xAxis[0]*dx*k + yAxis[0]*dy*k;
 			var desf_y = -xAxis[1]*dx*k + yAxis[1]*dy*k;
 			var desf_z = -xAxis[2]*dx*k + yAxis[2]*dy*k;
@@ -461,6 +711,7 @@ function onMouseDown(e) {
             mouse_x = window.event.offsetX;
             mouse_y = window.event.offsetY;
 			eventoInterno = EV_3D_REALTIME;
+			status = 1;
             break;
         case 2:
             mouse_x = window.event.offsetX;
@@ -498,49 +749,32 @@ function onMouseUp(e) {
 function onMouseWheel(e) {
 
     var delta = e.wheelDelta;
-    // ajusto la escala
-	var viewdir = vec3.create();
-	vec3.subtract(vLookFrom,vLookAt,viewdir)
-	var dist = vec3.length(viewdir);
-	vec3.normalize(viewdir)
-	if(delta>0)
-		dist *= 0.9;
+	if(delta<0)
+		speed *= 0.9;
 	else
-		dist *= 1.1;
-	vLookFrom[0] = vLookAt[0] + viewdir[0]*dist; 
-	vLookFrom[1] = vLookAt[1] + viewdir[1]*dist; 
-	vLookFrom[2] = vLookAt[2] + viewdir[2]*dist; 
+		speed *= 1.1;
 }
 
-function getStrShader(id) {
-        var shaderScript = document.getElementById(id);
-        if (!shaderScript) {
-            return null;
-        }
-
-        var str = "";
-        var k = shaderScript.firstChild;
-        while (k) {
-            if (k.nodeType == 3) {
-                str += k.textContent;
-            }
-            k = k.nextSibling;
-        }
-		return str;
-	}
-
-
 	
+	var ctx;
 
     function webGLStart() {
 		
-		var str = getStrShader("postprocess-fs");
-        document.getElementById("fractal").value = str;
 		document.addEventListener("mousemove", onMouseMove, true);
 		document.addEventListener("mousedown", onMouseDown, true);
 		document.addEventListener("mouseup", onMouseUp, true);
 		document.addEventListener("mousewheel", onMouseWheel, true);
-
+		
+		makeBasis(vel , Normal , BiTangente);
+		
+		// creo los enemigos
+		for(var n=0;n<8;++n)
+		{
+			vEnemigo[n] = [Math.random()*8-4, Math.random()*8-4, Math.random()*8-4];
+			velEnemigo[n] = [0,0,0];
+		}
+		vEnemigo[0] = [-4.5, 4.5, -4.5];
+		
         var canvas = document.getElementById("canvas");
         initGL(canvas);
         initShaders();
@@ -549,7 +783,12 @@ function getStrShader(id) {
         gl.enable(gl.DEPTH_TEST);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);		
 		gl.enable(gl.BLEND);
-        RenderLoop();
+		
+		var textCanvas = document.getElementById("text");
+		ctx = textCanvas.getContext("2d");		
+        ctx.font="14px Verdana"; 
+		ctx.textBaseline="top"; 
+		RenderLoop();
     }
 	
 </script>
@@ -558,14 +797,9 @@ function getStrShader(id) {
 
 
 <body onload="webGLStart();">
-<div class="row">
-  <div class="column" style="background-color:#aaa;">
-	<canvas id="canvas" style="border: none;" width="800" height="600"></canvas>
-  </div>
-  <div class="column" style="background-color:#bbb;">
-	<textarea id="fractal" cols="60" rows="40"></textarea>	
-	</div>
-  </div>
+<div class="container">
+	<canvas id="canvas" style="border:1px solid #000000;" width="1200" height="600"></canvas>
+	<canvas id="text" style="border:1px solid #000000;" width="1200" height="600"></canvas>
 </div>
 </body>
 </html>

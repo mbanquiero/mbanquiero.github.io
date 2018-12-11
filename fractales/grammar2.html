@@ -1,0 +1,119 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script type="text/javascript">
+
+var elapsed_time = 1/60;
+var canvas;
+var ctx;
+
+// reglas (del logo de la talent msx de 1980)
+// M : mover (hacia adelante)
+// + : rotar positivo n grados (el n es el valor fijo que tiene angulo)
+// - : rotar negativo n grados
+// ( : push en el stack de estado graficos (es decir guarda la posicion x,y)
+// ) : pop (recupera la posicion
+
+var angulo = 60;
+var axioma = "M++M++M";
+var reglas = [
+	"M->M-M++M-M",
+];
+
+var string = axioma;
+
+function que_regla(A)
+{
+	// devuelve que regla es la que se aplica a A
+	var rta = -1;
+	for(var i=0;i<reglas.length && rta==-1;++i)
+		if(reglas[i].charAt(0)==A)
+			rta = i;
+			
+	return rta;
+}
+
+function iterar()
+{
+	// tomo el string y aplico las reglas
+	var l = string.length;
+	var string_out = "";
+	for(var i=0;i<l;++i)
+	{
+		var A = string.charAt(i);
+		// busco el A en las reglas
+		var j = que_regla(A);
+		if(j!=-1)
+		{
+			// aplico la regla j al caracter A
+			string_out += reglas[j].substr(3);
+		}
+		else
+		{
+			// simobolo estatico
+			string_out += A;
+		}
+	}
+	string = string_out;
+}
+
+function draw() 
+{
+	// itero
+	var ds = 300;
+	for(var i = 0;i<9;++i)
+	{
+		ds /= 3;
+		iterar();
+	}
+
+
+	// borro la pantalla
+	ctx.fillStyle = 'rgba(255,255,255,255)';
+	ctx.fillRect(0,0,1200,1200);
+	var an = 0;
+	ctx.fillStyle = 'rgba(0,0,0,255)';
+	var x = 200;
+	var y = 300;
+	ctx.moveTo(x,y);
+		
+	// tomo el string y lo dibujo
+	var l = string.length;
+	for(var i=0;i<l;++i)
+	{
+		switch(string.charAt(i))
+		{
+			case 'M':
+				// move 
+				x += ds* Math.cos(an*Math.PI / 180);
+				y += ds* Math.sin(an*Math.PI / 180);
+				ctx.lineTo(x,y);
+				break;
+			case '-':
+				an += angulo;
+				break;
+			case '+':
+				an -= angulo;
+				break;
+		}
+	}
+	ctx.stroke();
+	
+}
+
+  
+function main()
+{   
+	canvas = document.getElementById('mycanvas');
+	ctx = canvas.getContext('2d');
+	draw();
+} 
+
+</script>
+
+</head>
+<body onload="main();">
+	<canvas id="mycanvas" width="1200" height="600" style="float:left"></canvas>
+</body>
+</html>
+ 
